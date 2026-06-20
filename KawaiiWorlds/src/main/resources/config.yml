@@ -1,0 +1,24 @@
+# ✿~ KawaiiWorlds config ~✿
+#
+# Worlds you create with /kw create are stored under `worlds:` and auto-loaded
+# on server startup. The primary world from server.properties is NOT listed
+# here — it's always loaded by Paper itself.
+#
+# Each entry looks like:
+#   myworld:
+#     type: normal      # normal | nether | end | void | flat | skyblock
+#     seed: 123456789   # random long, picked at create time, kept so the world
+#                       # generates consistently across restarts
+#     auto-load: true   # set false to skip on startup but keep folder
+worlds: {}
+
+# Per-world inventory groups. When true, moving between worlds saves the
+# player's inventory under the source group and loads the destination
+# group's inventory. Worlds whose names follow the vanilla pairing
+# convention (X, X_nether, X_the_end) share a group, so portal travel
+# inside the primary set keeps your items.
+per-world-inventory: true
+
+# First-time joiners are teleported to this world's spawn instead of the
+# primary. null = use the primary world (vanilla behavior).
+default-spawn-world: null

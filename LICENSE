@@ -1,0 +1,81 @@
+MIT License
+
+Copyright (c) 2026 feris (https://mez.ink/ferisooo)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+================================================================================
+ADDITIONAL NOTICES
+================================================================================
+
+The section above is the standard, unmodified MIT License and is the legally
+binding license for this Software. The notes below are clarifications, an
+attribution request, and a code of conduct. They do not add restrictions to
+the MIT grant above; where they ask more of you than the MIT License requires,
+treat them as the author's sincere request.
+
+1. Authorship and ideas
+   - This project was conceived and directed by **feris**
+     (https://mez.ink/ferisooo). The concepts, design, theme, and creative
+     direction ("the ideas") are the author's.
+   - The source code was generated with the assistance of an AI tool (Claude)
+     based on the author's ideas and direction. The author owns the resulting
+     work and licenses it under the MIT License above.
+
+2. Attribution (please respect the idea of creation)
+   - When you use, fork, redistribute, or build upon this Software, please keep
+     this LICENSE file and the copyright notice intact, as required by the MIT
+     License.
+   - Please do not present the ideas, design, or creative concept of this
+     project as your own original work. Credit to **feris
+     (https://mez.ink/ferisooo)** is appreciated.
+
+3. No warranty and no responsibility for use
+   - As stated in the MIT License above, the Software is provided "as is" with
+     no warranty. The author is **not responsible for how anyone uses, deploys,
+     modifies, or distributes** this Software, and accepts no liability for any
+     outcome arising from its use.
+
+4. Code of conduct (the author's request)
+   The author asks that you do not use this Software, in whole or in part, to:
+   - troll, harass, bully, or abuse others;
+   - scam, defraud, phish, or otherwise deceive people for gain;
+   - misrepresent the Software or its ideas as your own original creation;
+   - carry out any illegal activity or anything that violates the terms of
+     service of the platforms you run it on.
+
+5. Trademarks and third parties
+   - "Minecraft" is a trademark of Mojang Studios / Microsoft. This project is
+     an **unofficial, fan-made** collection of plugins and is **not affiliated
+     with, endorsed by, or sponsored by** Mojang Studios, Microsoft, the Paper
+     project, the Spigot project, or any other third party.
+   - Some plugins can optionally connect to third-party services (e.g. the
+     DeepSeek API). Use of those services is governed by their own terms. No
+     real API keys or credentials are included in this repository; you must
+     supply and safeguard your own.
+   - All other trademarks, product names, and brands are the property of their
+     respective owners and are used for identification purposes only.
+
+6. AI-generated content disclaimer
+   - Because portions of this Software were produced with AI assistance, the
+     author makes no guarantee that it is free of errors, bugs, or unintended
+     behavior. Review and test the code before using it in production.
+
+If any part of these Additional Notices is found to be unenforceable, the
+remaining MIT License above continues to apply in full.

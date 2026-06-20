@@ -1,0 +1,66 @@
+# KawaiiDungeons — global configuration
+# All sounds are played via string keys (e.g. "minecraft:..."); no Sound enum is used.
+
+# Difficulty tiers. Each scales mob health, mob outgoing damage, and loot rolls.
+difficulty:
+  normal:
+    health-mult: 1.0
+    damage-mult: 1.0
+    loot-mult: 1.0
+  hard:
+    health-mult: 1.5
+    damage-mult: 1.5
+    loot-mult: 1.25
+  nightmare:
+    health-mult: 2.25
+    damage-mult: 2.25
+    loot-mult: 1.75
+  mythic:
+    health-mult: 3.5
+    damage-mult: 3.5
+    loot-mult: 2.5
+
+# Custom-mob tier base multipliers (applied BEFORE the difficulty multiplier).
+tiers:
+  elite:
+    health-mult: 2.0
+    damage-mult: 1.25
+    glowing: false
+  miniboss:
+    health-mult: 5.0
+    damage-mult: 1.75
+    glowing: true
+  boss:
+    health-mult: 12.0
+    damage-mult: 2.5
+    glowing: true
+
+# Party + revive settings.
+party:
+  invite-expire-seconds: 120
+  max-size: 5
+revive:
+  revive-seconds: 30
+  # If true, downed players become spectators; otherwise they are frozen in place.
+  use-spectator: true
+
+# Hardcore endgame mode tuning.
+hardcore:
+  boss-health-mult: 2.0
+  loot-mult: 1.5
+  mob-explode-power: 2.0
+
+# Weekly reward (claim once per 7 days).
+weekly:
+  enabled: true
+  tokens: 100
+  cooldown-days: 7
+
+# Global toggles.
+toggles:
+  glowing-mobs: true
+  boss-bar-objective: true
+  action-bar-progress: true
+
+# How often (ticks) the per-instance tick task runs.
+instance-tick-ticks: 20

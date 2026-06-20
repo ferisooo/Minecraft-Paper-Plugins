@@ -1,0 +1,44 @@
+name: KawaiiCompanion
+version: ${project.version}
+main: com.ferisooo.kawaiicompanion.KawaiiCompanion
+api-version: '1.21'
+author: Ferris
+description: AI companion that follows you and chats via DeepSeek with configurable personality + memory.
+load: POSTWORLD
+softdepend: [Herobrine]
+
+commands:
+  kawaiicompanion:
+    description: Summon, dismiss, rename, or chat with your companion.
+    aliases: [kc, companion, kwcompanion]
+    usage: |
+      /kc summon              -- spawn your companion
+      /kc dismiss             -- despawn it
+      /kc say <message>       -- talk to it
+      /kc rename <name>       -- give it a new name
+      /kc skin <skinFileName> -- swap to a skin from the skins/ folder
+      /kc skins               -- open the appearances (skins/forms) menu
+      /kc form <mob|human>    -- morph into any mob (fights hostiles in its style)
+      /kc info                -- show level, xp and unlocked abilities
+      /kc mount               -- ride your companion (real-entity only)
+      /kc reset               -- wipe your conversation memory
+      /kc build               -- open the schematic build menu
+      /kc reload              -- reload config (admin)
+    permission: kawaiicompanion.use
+
+permissions:
+  kawaiicompanion.use:
+    description: Summon and chat with your own companion.
+    default: true
+  kawaiicompanion.build:
+    description: Access the schematic Build menu (places blocks in the world).
+    default: op
+  kawaiicompanion.admin:
+    description: Reload KawaiiCompanion config.
+    default: op
+  kawaiicompanion.kill.players:
+    description: Allow /kc kill to target players (PvP).
+    default: op
+  kawaiicompanion.multiple:
+    description: Summon extra "helper" companions (drones) from the control GUI.
+    default: op

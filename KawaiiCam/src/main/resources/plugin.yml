@@ -1,0 +1,21 @@
+name: KawaiiCam
+version: ${project.version}
+main: com.ferisooo.kawaiicam.KawaiiCam
+api-version: '1.21'
+author: Ferris
+description: An autonomous cinematic camera that flies intelligent shots and records a replayable camera track.
+
+commands:
+  cam:
+    description: Cinematic camera director.
+    aliases: [kcam, camera]
+    usage: /cam <follow|solo|stop|style|record|play|list|reload>
+    permission: kawaiicam.use
+
+permissions:
+  kawaiicam.use:
+    description: Use the cinematic camera (puts you in spectator view).
+    default: op
+  kawaiicam.admin:
+    description: Reload KawaiiCam config.
+    default: op

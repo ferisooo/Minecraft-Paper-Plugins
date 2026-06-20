@@ -1,0 +1,105 @@
+# ✿~ KawaiiNights config ~✿
+#
+# Spawns EXTRA hostile mobs around players, on top of vanilla spawns (vanilla
+# rates are left untouched). Mobs spawn at ANY time, weather and biome — just
+# MORE at night. Lit areas stay safe (mobs only appear where block light is low)
+# and a per-player cap stops runaway swarms. Hostiles also stop burning in
+# daylight, so daytime spawns stick around.
+
+# Master on/off.
+enabled: true
+
+# How often the spawner runs, in ticks (20 = 1s).
+check-ticks: 100
+
+# Baseline extra hostiles to try to spawn per player each run (applies day AND
+# night, any weather, any biome).
+mobs-per-player: 3
+
+# At night, the baseline count is multiplied by this (so nights get more mobs).
+# 2.0 = twice as many at night.
+night-multiplier: 2.0
+
+# Stop hostile mobs catching fire in sunlight (zombies/skeletons survive the
+# day). Fire, lava and flaming arrows still burn them.
+prevent-sunlight-burning: true
+
+# ===== Lag guard =====
+# If the server's TPS drops to/below the threshold, stop spawning and cull the
+# existing hostile swarm to recover. Bosses (Ender Dragon, Wither, Warden, Elder
+# Guardian) and player-kept (persistent/name-tagged) mobs are never culled.
+lag-guard:
+  enabled: true
+  tps-threshold: 17.0
+  cull-hostiles: true
+
+# Spawn ring around the player (blocks). Min keeps them from popping in your face.
+min-radius: 8
+max-radius: 28
+
+# Only spawn where BLOCK light (torches/lanterns) is at or below this. 7 matches
+# vanilla's hostile threshold, so a well-lit base is protected.
+max-block-light: 7
+
+# Skip a player entirely if they already have this many hostiles nearby
+# (prevents endless pile-ups).
+nearby-hostile-cap: 40
+
+# Random spots to try per spawn before giving up (higher = more reliable, a
+# touch more work).
+spawn-attempts: 6
+
+# Which hostile mobs the trickle spawner can use (any hostile EntityType name).
+mobs:
+  - ZOMBIE
+  - SKELETON
+  - SPIDER
+  - CREEPER
+
+# Worlds this applies to. Empty = all NORMAL (overworld-type) worlds.
+# The Nether and the End are always excluded.
+enabled-worlds: []
+
+# ===== Raids =====
+# Occasionally at night a single-species HORDE descends on everyone in the world
+# (all zombies, all skeletons, etc.). Each raid picks one species from the list
+# below. Raids ignore the trickle spawner's settings and have their own.
+raids:
+  enabled: true
+
+  # How many raids happen per night (a random number in this range each night).
+  # 0..2 means some nights are quiet, some get one or two. Set both to the same
+  # number for a fixed count; set max to 0 to effectively disable.
+  per-night-min: 0
+  per-night-max: 2
+
+  # How many mobs each raid throws at EACH player.
+  mob-count-per-player: 12
+
+  # Spawn ring for the horde (blocks). Tighter than the trickle spawner so it
+  # feels like they're closing in.
+  min-radius: 6
+  max-radius: 24
+
+  # Raids ignore the light check, so the horde can reach you even near a lit
+  # base (that's the point of a raid). Set false to keep lit areas safe.
+  ignore-light: true
+
+  # Show a "⚔ RAID!" title + play an ominous sound to everyone in the world.
+  announce: true
+  sound: ENTITY_ENDER_DRAGON_GROWL
+
+  # No sleeping your way out of a raid. While one is raging you can't sleep at
+  # all; and if a raid is scheduled for tonight, trying to sleep summons it NOW
+  # instead of skipping the night — so the raid happens whether you sleep or not.
+  # A raid counts as "active" for duration-seconds; after that, sleeping works
+  # again (with a "you can rest now" note).
+  block-sleep: true
+  duration-seconds: 60
+
+  # Which species a raid can be (each raid is ALL of one of these).
+  mobs:
+    - ZOMBIE
+    - SKELETON
+    - SPIDER
+    - CREEPER

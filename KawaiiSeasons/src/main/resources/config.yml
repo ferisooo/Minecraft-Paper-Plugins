@@ -1,0 +1,69 @@
+# ✿~ KawaiiSeasons config ~✿
+#
+# Seasons driven by IN-GAME time (not real-world time). The calendar reads the
+# primary world's game time (monotonic, unaffected by /time set), so seasons
+# advance as the world is actually played.
+#
+# Cycle: Spring → Summer → Autumn → Winter, each lasting `days-per-season`
+# in-game days, then repeats.
+
+# Master on/off.
+enabled: true
+
+# In-game days each season lasts.
+days-per-season: 20
+
+# How often (ticks) the plugin updates effects/weather/snow. 20 = 1s.
+update-ticks: 60
+
+# Show a season title to players when the season changes.
+announce-changes: true
+
+# Drifting seasonal particles around players (cherry petals, falling blossoms,
+# snowflakes). Summer shows none (heat is felt, not shown).
+ambience-particles: true
+
+# Show the current season + days-left on the action bar (above the hotbar),
+# e.g. "❄ Winter (3 days left)". Refreshes every update-ticks.
+action-bar: true
+
+# Which worlds seasons apply to. Empty = all NORMAL (overworld-type) worlds.
+# The Nether and the End are always excluded.
+enabled-worlds: []
+
+# ---- How seasons affect the PLAYER ----
+player:
+  # Winter chills players exposed to the sky: a frost vignette (no freeze
+  # damage) + Slowness.
+  winter-cold: true
+  # Summer heat burns energy faster (hunger drops quicker) — but ONLY for players
+  # out under the open sky, so shade/indoors is a refuge. Pairs with KawaiiThirst.
+  summer-heat: true
+  # Exhaustion added per update in summer sun (0.25 is gentle; 4.0 = one food
+  # point). Was higher in v1 — tuned down so idling outside isn't brutal.
+  summer-heat-exhaustion: 0.25
+
+# ---- How seasons affect CROPS ----
+# Chance (0..1) that a crop's growth tick is skipped, slowing farming.
+crops:
+  winter-growth-cancel-chance: 0.85   # crops nearly freeze
+  autumn-growth-cancel-chance: 0.25   # harvest slows a little
+
+# ---- WINTER environment ----
+winter:
+  # Force a storm in applicable worlds during winter.
+  force-weather: true
+  # Simulate snow by placing thin snow layers on exposed ground around players —
+  # this makes it snow in EVERY biome, even deserts (clients won't render snow
+  # in warm biomes otherwise). Note: in hot biomes the game may melt placed snow
+  # quickly, so it can flicker — the forced storm + snowflake particles keep the
+  # wintry feel there regardless.
+  snow-simulation: true
+  # Only let snow settle on NATURAL ground (grass, dirt, sand, stone, etc.) so it
+  # never coats player builds (wood, concrete, bricks…). Strongly recommended.
+  snow-on-natural-ground-only: true
+  # Freeze exposed water surfaces near players into ice. OFF by default because
+  # it breaks ponds, water elevators and item-stream farms near spawn/bases.
+  freeze-water: false
+  # How far around each player to apply snow/ice (1..10). Bigger = heavier load.
+  snow-radius: 5

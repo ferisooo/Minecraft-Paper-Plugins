@@ -1,0 +1,18 @@
+name: KawaiiHearts
+version: ${project.version}
+main: com.ferisooo.kawaiihearts.KawaiiHearts
+api-version: '1.21'
+author: Ferris
+description: Floats a cute pink health bar above every mob's head. ✿
+
+commands:
+  kawaiihearts:
+    description: KawaiiHearts admin commands.
+    aliases: [khearts, khp]
+    usage: /khearts reload
+    permission: kawaiihearts.admin
+
+permissions:
+  kawaiihearts.admin:
+    description: Use /khearts reload.
+    default: op

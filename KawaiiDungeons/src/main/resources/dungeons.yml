@@ -1,0 +1,105 @@
+# KawaiiDungeons — dungeon definitions.
+#
+# IMPORTANT: every dungeon references a TEMPLATE WORLD that an admin must place
+# in the server root (the Bukkit world container, next to "world/"). Each run
+# CLONES this template into a fresh folder named "kawaii_dgn_<id>_<runid>", so
+# the template itself is never modified and many parties can run at once.
+#
+# The example below references a template world named "DUNGEON_CRYPT". Create
+# that world (build it, then copy/save the folder) before starting the dungeon.
+
+dungeons:
+  crypt:
+    display-name: "&5The Whispering Crypt"
+    template-world: "DUNGEON_CRYPT"
+    # Where the party spawns inside the cloned instance.
+    spawn:
+      x: 0.5
+      y: 65.0
+      z: 0.5
+      yaw: 0.0
+      pitch: 0.0
+    level-requirement: 0
+    gear-score-requirement: 0
+    time-limit-seconds: 900
+    # Objective: type + params. See README for all 8 types.
+    objective:
+      type: KILL_BOSS
+      # for COLLECT_RELICS / ACTIVATE_SHRINES / DESTROY_CRYSTALS / SURVIVE_WAVES: amount
+      amount: 1
+      # for DEFEND_NPC / ESCORT_NPC / TIMED_CHALLENGE: duration-seconds
+      duration-seconds: 120
+      # for ESCORT_NPC: goal point
+      goal:
+        x: 30.5
+        y: 65.0
+        z: 0.5
+      # for DEFEND_NPC / ESCORT_NPC: where the NPC spawns
+      npc:
+        x: 0.5
+        y: 65.0
+        z: 4.5
+    # Static mobs spawned on start.
+    mobs:
+      - type: ZOMBIE
+        tier: ELITE
+        count: 6
+        location:
+          x: 10.5
+          y: 65.0
+          z: 0.5
+      - type: SKELETON
+        tier: ELITE
+        count: 4
+        location:
+          x: -10.5
+          y: 65.0
+          z: 0.5
+      - type: WITHER_SKELETON
+        tier: MINIBOSS
+        count: 1
+        location:
+          x: 0.5
+          y: 65.0
+          z: 18.5
+    # Optional wave definitions (used by SURVIVE_WAVES / DEFEND_NPC objectives,
+    # but may exist alongside static mobs for flavour).
+    waves:
+      - delay-seconds: 0
+        mobs:
+          - type: ZOMBIE
+            tier: ELITE
+            count: 4
+            location:
+              x: 0.5
+              y: 65.0
+              z: 10.5
+      - delay-seconds: 30
+        mobs:
+          - type: HUSK
+            tier: ELITE
+            count: 5
+            location:
+              x: 0.5
+              y: 65.0
+              z: 10.5
+    boss:
+      type: WITHER_SKELETON
+      base-health: 400.0
+      location:
+        x: 0.5
+        y: 65.0
+        z: 30.5
+      phases:
+        - from: 100
+          to: 70
+          abilities: ["message", "speed_self"]
+        - from: 70
+          to: 40
+          abilities: ["summon_adds", "message"]
+        - from: 40
+          to: 0
+          abilities: ["aoe_burst", "summon_adds", "message"]
+    loot-table: "crypt_loot"
+    token-reward: 25
+    reputation-reward: 10

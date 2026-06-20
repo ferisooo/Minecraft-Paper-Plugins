@@ -1,0 +1,25 @@
+name: KawaiiRTP
+version: ${project.version}
+main: com.ferisooo.kawaiirtp.KawaiiRTP
+api-version: '1.21'
+author: Ferris
+description: Random teleport that lands on dry, breathable ground a configurable distance away.
+load: POSTWORLD
+
+commands:
+  kawaiirtp:
+    description: Teleport to a random safe spot a configurable distance away.
+    aliases: [krtp, rtp, kwrtp]
+    usage: /krtp [reload]
+    permission: kawaiirtp.use
+
+permissions:
+  kawaiirtp.use:
+    description: Use /krtp to randomly teleport.
+    default: true
+  kawaiirtp.admin:
+    description: Reload KawaiiRTP and bypass cooldowns.
+    default: op
+  kawaiirtp.bypass-cooldown:
+    description: Skip the per-player /krtp cooldown.
+    default: op

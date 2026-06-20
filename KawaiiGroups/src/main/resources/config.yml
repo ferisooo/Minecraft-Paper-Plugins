@@ -1,0 +1,38 @@
+# ✿~ KawaiiGroups config ~✿
+#
+# Groups are online-only: a member who logs off is removed from the group, and
+# if the owner logs off the group disbands. While you're grouped, your max
+# hearts scale with the number of ONLINE members.
+
+# Hearts a solo / groupless player has (matches FiveHearts' default of 5).
+base-hearts: 5
+
+# Hearts added per online member. With 5, a 2-person group = 10 hearts,
+# 3-person = 15, and so on (hearts = hearts-per-member x members).
+hearts-per-member: 5
+
+# Hard cap on total hearts so a huge group can't make someone absurdly tanky.
+max-hearts: 50
+
+# How long a group invite stays open (seconds).
+invite-expiry-seconds: 120
+
+# How long a group teleport request stays open (seconds).
+teleport-expiry-seconds: 60
+
+# Max characters in a group name (min is always 3).
+max-name-length: 24
+
+# Stop members of the same group from hurting each other (friendly fire off) —
+# melee, arrows, and thrown potions are all blocked between groupmates.
+prevent-party-pvp: true
+
+# Automatic server-wide announcements when a group member hits a milestone,
+# e.g. "[The Hellknights] steve slew the Ender Dragon!". The manual
+# /group announce command works regardless of these toggles.
+announcements:
+  enabled: true            # master switch for AUTOMATIC announcements
+  bosses: true             # broadcast when a member kills a boss
+  # Which mobs count as a "boss". Unknown names (older/newer servers) are skipped.
+  boss-types: [ENDER_DRAGON, WITHER, WARDEN, ELDER_GUARDIAN]
+  advancements: false      # broadcast notable advancements (off by default — chatty)

@@ -1,0 +1,27 @@
+# ✿~ KawaiiFurnace config ~✿
+#
+# Speeds up smelting/cooking in furnaces, blast furnaces and smokers by
+# shortening each item's cook time. A multiplier of 4.0 means "4x faster"
+# (vanilla furnace 10s -> 2.5s; blast furnace / smoker 5s -> 1.25s).
+
+# Master switch.
+enabled: true
+
+# Default speed multiplier used for any furnace-type block without its own
+# value below. 1.0 = vanilla speed, 2.0 = twice as fast, etc. Minimum 1.0.
+speed-multiplier: 4.0
+
+# Per-type speed multipliers. Set to 0 (or remove) to fall back to the
+# default speed-multiplier above.
+furnace-multiplier: 4.0
+blast-furnace-multiplier: 4.0
+smoker-multiplier: 4.0
+
+# Never drop an item's cook time below this many ticks (20 ticks = 1s).
+# Keeps things from being literally instant. Minimum 1.
+min-cook-ticks: 5
+
+# Fuel efficiency: multiply how long each piece of fuel burns. 1.0 = vanilla.
+# 2.0 = fuel lasts twice as long. Combine with the speed above for furnaces
+# that are both fast AND thrifty. Minimum 1.0.
+fuel-efficiency: 1.0

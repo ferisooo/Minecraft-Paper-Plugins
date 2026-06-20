@@ -1,0 +1,22 @@
+name: KawaiiEnderChest
+version: ${project.version}
+main: com.ferisooo.kawaiienderchest.KawaiiEnderChest
+api-version: '1.21'
+author: Ferris
+description: Bigger ender chest — 54 slots (two chests combined), per-player and saved to disk.
+load: POSTWORLD
+
+commands:
+  kawaiienderchest:
+    description: Open your big ender chest, or reload the plugin.
+    aliases: [kec, enderchest, echest]
+    usage: /kec [reload]
+    permission: kawaiienderchest.use
+
+permissions:
+  kawaiienderchest.use:
+    description: Open the 54-slot ender chest (and have it open from ender chest blocks).
+    default: true
+  kawaiienderchest.admin:
+    description: Reload KawaiiEnderChest.
+    default: op

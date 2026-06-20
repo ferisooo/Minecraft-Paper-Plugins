@@ -1,0 +1,38 @@
+name: Herobrine
+version: ${project.version}
+main: com.ferisooo.herobrine.HerobrinePlugin
+api-version: '1.21'
+author: Ferris
+description: Full-scale Herobrine entity system — stalking AI, threat tracking, mysterious structures, environmental manipulation, and a multi-phase boss encounter.
+load: POSTWORLD
+
+commands:
+  herobrine:
+    description: Control the Herobrine system.
+    aliases: [hb]
+    usage: |
+      /herobrine spawn               -- spawn the stalker watching you
+      /herobrine despawn             -- remove the active Herobrine
+      /herobrine hunt [player]       -- send Herobrine to actively hunt a player
+      /herobrine boss [player]       -- start the boss encounter against a player
+      /herobrine threat [player] [n] -- view or set a player's threat level
+      /herobrine reload              -- reload config.yml
+    permission: herobrine.admin
+
+permissions:
+  herobrine.admin:
+    description: Full access to all Herobrine commands.
+    default: op
+    children:
+      herobrine.spawn: true
+      herobrine.boss: true
+      herobrine.reload: true
+  herobrine.spawn:
+    description: Spawn/despawn/hunt with Herobrine.
+    default: op
+  herobrine.boss:
+    description: Trigger the Herobrine boss encounter.
+    default: op
+  herobrine.reload:
+    description: Reload the Herobrine configuration.
+    default: op

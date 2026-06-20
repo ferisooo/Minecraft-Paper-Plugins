@@ -1,0 +1,21 @@
+name: KawaiiThirst
+version: ${project.version}
+main: com.ferisooo.kawaiithirst.KawaiiThirst
+api-version: '1.21'
+author: Ferris
+description: A thirst stat (shown as a boss bar) that drains over time and is restored by drinking. Works for Bedrock via Geyser.
+
+commands:
+  thirst:
+    description: Check thirst / admin set & reload.
+    aliases: [kthirst, water]
+    usage: /thirst [reload|set <amount> [player]]
+    permission: kawaiithirst.use
+
+permissions:
+  kawaiithirst.use:
+    description: Check your own thirst.
+    default: true
+  kawaiithirst.admin:
+    description: Set thirst / reload config.
+    default: op

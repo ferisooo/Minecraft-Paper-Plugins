@@ -1,0 +1,21 @@
+name: KawaiiSeasons
+version: ${project.version}
+main: com.ferisooo.kawaiiseasons.KawaiiSeasons
+api-version: '1.21'
+author: Ferris
+description: In-game-time seasons that change the player, crops and environment (incl. forced winter snow in every biome).
+
+commands:
+  season:
+    description: Show or set the current season.
+    aliases: [kseason, seasons]
+    usage: /season [set <spring|summer|autumn|winter>|reload]
+    permission: kawaiiseasons.use
+
+permissions:
+  kawaiiseasons.use:
+    description: View the current season.
+    default: true
+  kawaiiseasons.admin:
+    description: Set the season / reload config.
+    default: op

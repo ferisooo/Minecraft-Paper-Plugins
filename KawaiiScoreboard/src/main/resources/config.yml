@@ -1,0 +1,41 @@
+# ✿~ KawaiiScoreboard config ~✿
+
+# How often (in ticks) to refresh coords / online count. 20 ticks = 1s.
+# Lower = smoother, higher = lighter on the server. Minimum 1.
+update-ticks: 10
+
+# Show the sidebar to players the moment they join. Players can still
+# /ksb off to dismiss it for that session.
+show-on-join: true
+
+# Show X/Y/Z. Set false if you want a tinier sidebar without coords.
+show-coords: true
+
+# Show real time played in the CURRENT world. Each world is tracked
+# separately (per-world days/hours/minutes), saved to playtime.yml in
+# this plugin's folder. Set false to hide the "Time here" row.
+show-playtime: true
+
+# Show the current KawaiiSeasons season on the sidebar (read off the player;
+# nothing shows if KawaiiSeasons isn't installed / the world has no seasons).
+show-season: true
+
+# Strip any leftover "health" objective from the main scoreboard's below-name
+# slot on enable + periodically. That objective (often left in scoreboard.dat
+# by a removed plugin or an old /scoreboard command) shows every mob's health
+# under its name — visible through walls. Set false to leave it alone.
+clear-belowname-health: true
+
+# Show the player's active KawaiiQuest (title + progress) on the sidebar.
+# This reads the quest straight off the player via KawaiiQuests; if that
+# plugin isn't installed nothing extra shows. The two quest rows only appear
+# while the player actually has a quest. Set false to never show them.
+show-quest: true
+
+# Sidebar title (legacy color codes supported via §).
+title: '§d§l✿ Kawaii ✿'
+
+# Animate the title with a pink→purple→white shimmer that sweeps across it.
+# Uses the plain text of 'title' above (its color codes are ignored while
+# animating). Set false to keep the static colored title instead.
+animated-title: true

@@ -1,0 +1,20 @@
+# ✿~ KawaiiLogger config ~✿
+#
+# Discord webhook URL — make one in Discord:
+#   server settings -> integrations -> webhooks -> new webhook -> copy URL
+# (Optional! If left blank, events still get saved to the logs folder.)
+webhook-url: "PASTE_YOUR_DISCORD_WEBHOOK_HERE"
+
+# Display name for the bot in Discord
+bot-name: "Stella ✨"
+
+# How long to wait (in seconds) before sending a batched message.
+# Mining/chopping/crafting/damage/mob-kills/villager-trades get grouped during
+# this window so you get "killed 8× zombie, 3× skeleton" instead of spam.
+# Bigger = less spammy. Smaller = more real-time.
+batch-seconds: 8
+
+# ─── Local log files ──────────────────────────────────────────────────────
+# Every event is also written to plugins/KawaiiLogger/logs/YYYY-MM-DD.log
+# (one file per day, UTF-8 encoded). Player state (first-join dates, milestones)
+# is saved to plugins/KawaiiLogger/player-state.properties — leave that alone~

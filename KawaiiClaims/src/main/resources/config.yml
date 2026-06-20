@@ -1,0 +1,210 @@
+# =========================================================
+#  KawaiiClaims configuration
+#  A multi-chunk land claim and protection plugin.
+# =========================================================
+
+# Worlds where claiming is allowed. Leave EMPTY ( [] ) to allow ALL worlds.
+# Example:
+#   enabled-worlds:
+#     - world
+#     - world_nether
+enabled-worlds: []
+
+# Maximum number of chunks a single player may claim (total, across all of
+# their claims). A claim is a connected SET of chunks: adjacent chunks owned
+# by the same player auto-merge into one claim.
+# Players with kawaiiclaims.admin are exempt (unlimited).
+# Per-player bonuses can be granted with /claim admin givechunks|setchunks and
+# are stored in claims.yml under bonus-chunks.<uuid>.
+max-chunks-per-player: 16
+
+# Maximum radius for /claim radius <n>. The command claims a (2n+1)x(2n+1)
+# square of chunks centered on the player. Non-admins are capped at this value.
+max-radius: 5
+
+# ---------------------------------------------------------
+#  Claim expiration (DISABLED by default - it deletes builds!)
+# ---------------------------------------------------------
+# Number of days an owner may be inactive before their claims are
+# automatically deleted. 0 = expiration is OFF.
+# A claim only expires if the owner is OFFLINE and inactive past the window.
+# Players/claims with kawaiiclaims.exempt are never expired.
+expiration-days: 0
+
+# How often (in hours) the expiration sweep runs. Default 12.
+expiration-check-hours: 12
+
+# ---------------------------------------------------------
+#  Optional "server" owner UUID for admin/server-owned claims.
+#  Leave blank to disable. Claims owned by this UUID are treated as
+#  server claims (exempt from expiration & per-player limits).
+# ---------------------------------------------------------
+server-uuid: ""
+
+# Show greeting/farewell messages on the action bar (true) or in chat (false).
+messages-on-actionbar: true
+
+# Give each player a golden "Claim Tool" shovel once, the first time they join
+# after this is enabled. Players can get a replacement with /claim tool.
+give-tool-on-join: true
+
+# Briefly flash a particle border when a player walks into one of their OWN
+# claims (uses the same outline as /claim show). Set false to disable.
+show-border-on-enter: true
+
+# ---------------------------------------------------------
+#  Default flag values for newly created claims (WORLD / ENVIRONMENT flags).
+#  Players can override per-claim with /claim flag <flag> <on|off> or the
+#  paged Flags GUI. The whole set is DATA-DRIVEN: adding/removing a key here
+#  changes what appears in the command, tab-complete, and the Flags GUI.
+#
+#  Convention: protective/destructive behaviour defaults OFF (explosions, fire,
+#  pvp, mob spawns of monsters, entity grief, lightning). Natural growth/spread
+#  and ordinary damage (fall/void/etc.) default ON.
+# ---------------------------------------------------------
+flag-defaults:
+  # --- combat / explosions / fire (default OFF) ---
+  pvp: false                       # Player-vs-player combat. false = safe zone.
+  tnt_explosions: false            # Primed TNT (and TNT minecart) explosions.
+  creeper_explosions: false        # Creeper explosions.
+  explosion_block_damage: false    # Explosions breaking blocks (master gate).
+  fire_spread: false               # Fire spreading from block to block.
+  fire_burn: false                 # Fire burning blocks away.
+  fire_ignite: false               # Non-player fire ignition (lava/lightning/etc.).
+  # --- entities / weather (default OFF) ---
+  entity_grief: false              # Mobs altering/destroying blocks & decorations.
+  lightning_strike: false          # Lightning strikes landing in the claim.
+  # --- natural growth (default ON) ---
+  leaf_decay: true                 # false = leaves never decay.
+  crop_growth: true                # Crops maturing.
+  # --- world mechanics ---
+  liquids_flow: true               # Water/lava flowing within the claim.
+  fall_damage: true                # Fall damage to entities inside the claim.
+  natural_breeding: true           # Animals breeding naturally.
+  # --- weather / world ---
+  weather_change: false            # Weather turning to rain/thunder.
+  portal_create: false             # Nether portal frames igniting/creating.
+
+# ---------------------------------------------------------
+#  Member PERMISSION defaults, per role (SCS-style).
+#  A player's role = their trust level (access/container/build/manage), or
+#  "visitor" when untrusted. The OWNER always has every permission; admins with
+#  /claim bypass ignore everything. Each role's grants are tunable here and per
+#  claim via /claim perm <role> <perm> <on|off> or the Role Permissions GUI.
+#
+#  Any permission key NOT listed under a role inherits a sensible built-in
+#  default (cumulative: access < container < build < manage; visitor only gets
+#  harmless self-affecting actions). Only override the keys you care about.
+# ---------------------------------------------------------
+roles:
+  visitor:
+    eat: true
+    use_elytra: true
+    # everything else defaults to false for visitors
+    destroy_block: false
+    place_block: false
+  access:
+    interact_door: true
+    interact_trapdoor: true
+    interact_fence_gate: true
+    interact_button: true
+    interact_lever: true
+    interact_pressure_plate: true
+    interact_crafting_table: true
+    interact_enchanting_table: true
+    interact_vehicle: true
+    use_ender_pearl: true
+  container:
+    interact_chest: true
+    interact_barrel: true
+    interact_shulker_box: true
+    interact_furnace: true
+    interact_hopper: true
+    interact_anvil: true
+    interact_brewing_stand: true
+    interact_beacon: true
+    interact_bed: true
+    interact_item_frame: true
+    pickup_item: true
+    drop_item: true
+    use_bucket: true
+    shear_entity: true
+    breed_entity: true
+    tame_entity: true
+  build:
+    destroy_block: true
+    place_block: true
+    trample_crops: true
+    damage_entity: true
+    destroy_item_frame: true
+    destroy_armor_stand: true
+    destroy_vehicle: true
+    interact_armor_stand: true
+    interact_villager: true
+    interact_entity: true
+  manage:
+    # MANAGE inherits build; tune extra grants here.
+
+# ---------------------------------------------------------
+#  Flag PRESETS. Each preset is a named bundle of flag values that can be
+#  applied to a claim at once with /claim preset <name> (owner/manage only) or
+#  via the Presets GUI button on the claim menu. Only the flags you list are
+#  changed; any flag you omit keeps its current value. Keys must be one of the
+#  16 recognised flags (see flag-defaults above).
+# ---------------------------------------------------------
+presets:
+  private:
+    # Locked-down: every protective/destructive thing off, growth kept natural.
+    pvp: false
+    tnt_explosions: false
+    creeper_explosions: false
+    explosion_block_damage: false
+    fire_spread: false
+    fire_burn: false
+    fire_ignite: false
+    entity_grief: false
+    lightning_strike: false
+    leaf_decay: true
+    crop_growth: true
+    liquids_flow: true
+    fall_damage: true
+    natural_breeding: true
+    weather_change: false
+    portal_create: false
+  public-farm:
+    # A shared farm: builds stay protected, but growth/breeding/liquids thrive.
+    pvp: false
+    explosion_block_damage: false
+    entity_grief: false
+    crop_growth: true
+    leaf_decay: true
+    liquids_flow: true
+    natural_breeding: true
+    fall_damage: false
+  pvp-arena:
+    # Combat zone: pvp on, but explosions never break the arena.
+    pvp: true
+    tnt_explosions: false
+    creeper_explosions: false
+    explosion_block_damage: false
+    fire_spread: false
+    fall_damage: true
+  open:
+    # Mostly vanilla: most behaviours allowed (block damage still off so the
+    # claim cannot be griefed by explosions).
+    pvp: true
+    tnt_explosions: true
+    creeper_explosions: true
+    explosion_block_damage: false
+    fire_spread: true
+    fire_burn: true
+    fire_ignite: true
+    entity_grief: false
+    lightning_strike: true
+    leaf_decay: true
+    crop_growth: true
+    liquids_flow: true
+    fall_damage: true
+    natural_breeding: true
+    weather_change: true
+    portal_create: true

@@ -1,0 +1,16 @@
+# KawaiiEssentials (✧) configuration
+
+# Materials offered as one-click "clear by type" buttons in /trash filter.
+# Any unknown material names are silently skipped (version-safe).
+trash-filter-items:
+  - COBBLESTONE
+  - DIRT
+  - GRAVEL
+  - SAND
+  - COBBLED_DEEPSLATE
+  - NETHERRACK
+  - ANDESITE
+  - DIORITE
+  - GRANITE
+  - FLINT
+  - ROTTEN_FLESH

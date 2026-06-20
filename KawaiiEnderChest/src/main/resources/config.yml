@@ -1,0 +1,18 @@
+# ✿~ KawaiiEnderChest config ~✿
+#
+# Replaces the vanilla 27-slot ender chest with a 54-slot one (two
+# chests combined). Contents are stored per-player on disk, so they
+# survive restarts and follow the player across worlds. Works for
+# Bedrock players through Geyser — 54 slots renders as a double chest.
+
+# Number of slots in the ender chest. Must be a multiple of 9 and at
+# most 54 (Minecraft's largest single container). 54 = two chests.
+slots: 54
+
+# Sidebar/inventory title shown at the top of the ender chest GUI.
+# Legacy color codes supported via §.
+title: '§d✿ Ender Chest ✿'
+
+# On a player's FIRST open, copy whatever is in their existing vanilla
+# 27-slot ender chest into the new big one so nothing is lost.
+import-vanilla-on-first-open: true

@@ -1,0 +1,60 @@
+# ===== KawaiiNoCheat ==========================================
+# Blocks "cheaty" commands for normal players and shows a cute
+# popup. Players with the permission 'kawaiinocheat.bypass'
+# (default: op) are exempt, so operators can still use them.
+#
+# NOTE: this only intercepts commands typed by players. The
+# console and command blocks are never blocked.
+
+# Block operators too?
+#   false (default) → players with kawaiinocheat.bypass (default op)
+#                     are exempt, so ops can still cheat.
+#   true            → nobody is exempt; ops get the popup as well.
+block-ops: false
+
+# Command roots to block. Matching is on the first word only and
+# is namespace-insensitive, so 'give' also blocks 'minecraft:give'.
+blocked-commands:
+  - gamemode
+  - give
+  - time
+  - weather
+  - effect
+  - enchant
+  - experience
+  - xp
+  - gamerule
+  - setblock
+  - fill
+  - clone
+  - summon
+  - clear
+  - tp
+  - teleport
+  - kill
+  - fly
+  - speed
+  - god
+  - heal
+  - feed
+  - op
+  - deop
+  - item
+
+# The cute popup. {command} is replaced with what they tried.
+title: '§d✿ no cheating~ ✿'
+subtitle: '§7survival means survival, silly!'
+chat-message: '§d(✧) ehe~ no §c/{command}§d for you~ stay legit! 💖'
+
+# Title timing (ticks): fade-in, stay, fade-out.
+title-fade-in: 8
+title-stay: 50
+title-fade-out: 12
+
+# Play a sound with the popup.
+play-sound: true
+sound: ENTITY_VILLAGER_NO
+
+# Puff a little "nope" particle cloud (angry villager + smoke) around the
+# player when a command is blocked. Only that player sees it.
+particles: true

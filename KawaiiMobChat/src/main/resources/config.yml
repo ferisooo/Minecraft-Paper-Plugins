@@ -1,0 +1,75 @@
+# ✿~ KawaiiMobChat config ~✿
+#
+# Mobs respond to player chat using the DeepSeek AI. The plugin picks the
+# mob you are looking at (within range-blocks). If you say something nice
+# they may be friendly, if you insult them, they get angry and aggro you.
+
+# Master switch — set to false to silence mob chat without removing the plugin.
+enabled: true
+
+# DeepSeek API key — get one at https://platform.deepseek.com
+# Send the key as a Bearer token. Do NOT share it publicly.
+api-key: "PASTE_YOUR_DEEPSEEK_API_KEY_HERE"
+
+# DeepSeek API endpoint (no trailing slash, no /v1).
+# Default works for the official DeepSeek API. Swap for a relay/gateway if needed.
+endpoint: "https://api.deepseek.com/chat/completions"
+
+# Model name. As of April 2026:
+#   - "deepseek-v4-flash" — fastest + cheapest, recommended for chat-as-mob
+#   - "deepseek-v4-pro"   — smarter but slower + pricier
+#   - "deepseek-chat" / "deepseek-reasoner" — legacy aliases (deprecated 2026/07/24)
+model: "deepseek-v4-flash"
+
+# Max tokens to generate per reply. Replies are 1 short sentence so 200 is plenty.
+# Bumped from 100 in v1.0.x because some replies were getting truncated mid-sentence.
+max-tokens: 200
+
+# Temperature 0.0 (deterministic) to 2.0 (chaotic). 0.9 = lively but coherent.
+temperature: 0.9
+
+# How far the player can be from a mob and still target it (blocks).
+range-blocks: 12
+
+# Per-player cooldown between API calls (seconds). Prevents spam-hitting your
+# DeepSeek bill. The player can still chat normally during the cooldown — the
+# mob just won't respond until it expires.
+cooldown-seconds: 5
+
+# Maximum length of a mob's reply (characters). Cuts off rambling replies.
+max-reply-length: 200
+
+# Show the mob's reply as a floating bubble above its head (TextDisplay).
+# Requires Paper 1.19.4+. If the mob despawned before the reply arrived,
+# the line falls back to chat broadcast so the message isn't lost.
+chat-bubbles: true
+
+# Also broadcast the reply to in-game chat. Set true if you want both bubble
+# and chat log; set false for "bubble only" so chat stays clean.
+chat-broadcast: false
+
+# How long the floating bubble stays up (seconds).
+bubble-duration-seconds: 6
+
+# Per-mob conversation memory. Each mob remembers up to N recent
+# turns (one turn = one player message + one mob reply) so the AI
+# stays in character across multiple exchanges.
+memory-enabled: true
+memory-max-turns: 4
+# How long a mob's memory persists with no further chat before it's dropped.
+memory-idle-minutes: 10
+
+# Play the mob's vanilla sound when it speaks, pitched per mood.
+sounds-enabled: true
+
+# Track how many of each mob type a player has killed and feed the count
+# into the AI's awareness context. A pig that has heard you murder its kin
+# reacts very differently. Saved to plugins/KawaiiMobChat/reputation.yml.
+reputation-enabled: true
+
+# After a mob speaks, a nearby fellow of the same type may chime in with
+# a one-line reaction. Costs an extra API call per banter, so tune chance.
+banter-enabled: true
+banter-chance: 0.25         # 0.0 = never, 1.0 = always when a peer is nearby
+banter-radius: 8.0          # blocks
+banter-cooldown-seconds: 60 # per-mob cooldown to avoid the same mob chiming in repeatedly

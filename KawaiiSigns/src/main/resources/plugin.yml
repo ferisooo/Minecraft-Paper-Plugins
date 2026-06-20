@@ -1,0 +1,14 @@
+name: KawaiiSigns
+version: 1.0.0
+main: com.ferisooo.kawaiisigns.KawaiiSigns
+api-version: '1.21'
+author: Ferris
+description: Classic [command] signs - put [command] on line 1, command on line 2+, right-click to run as the clicking player. Plus & color code translation on signs.
+
+permissions:
+  kawaiisigns.create:
+    description: Create and break command signs.
+    default: op
+  kawaiisigns.color:
+    description: Use & color codes on signs.
+    default: op

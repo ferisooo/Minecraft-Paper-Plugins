@@ -1,0 +1,6 @@
+name: FiveHearts
+version: ${project.version}
+main: com.ferisooo.fivehearts.FiveHearts
+api-version: '1.21'
+author: Ferris
+description: Forcefully locks all players to 5 hearts.

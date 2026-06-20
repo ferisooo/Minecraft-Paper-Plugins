@@ -1,0 +1,36 @@
+# ✿~ KawaiiBlockHP config ~✿
+
+# The HP bar shows ABOVE THE HOTBAR (the action bar) while you mine a block.
+
+# The line shown above the hotbar while breaking. Placeholders:
+#   {block}   -> the block's name (e.g. "Stone", "Oak Log")
+#   {bar}     -> the drained/filled HP bar
+#   {percent} -> remaining HP percent (0-100)
+# Color codes use & (e.g. &a green, &c red).
+title: '&f{block} {bar} &a{percent}%'
+
+# How many characters wide the bar is.
+bar-length: 20
+
+# Character used for the filled (remaining HP) part of the bar.
+filled-char: '|'
+
+# Character used for the drained (broken) part of the bar.
+empty-char: '|'
+
+# Recolor the filled part of the bar as the block's HP drops:
+#   above yellow-threshold  -> green
+#   above red-threshold     -> yellow
+#   below red-threshold     -> red
+# Set false to keep the bar green the whole time.
+color-by-health: true
+
+# Fraction of HP (0.0-1.0) above which the bar stays GREEN.
+yellow-threshold: 0.5
+
+# Fraction of HP (0.0-1.0) above which the bar is YELLOW (and RED below).
+red-threshold: 0.2
+
+# How long (in ticks) to keep the bar on screen after you stop mining
+# without breaking the block. 20 ticks = 1 second.
+linger-ticks: 8

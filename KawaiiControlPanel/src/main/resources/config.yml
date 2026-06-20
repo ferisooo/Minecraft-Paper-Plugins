@@ -1,0 +1,25 @@
+# ===== KawaiiControlPanel =====================================
+# A chest-GUI hub that lets you view + edit every other Kawaii
+# plugin's config.yml in-game, then applies the change live.
+#
+# /kpanel  (aliases: /kcp /kconfig /kawaiipanel)
+
+# Apply edits live by dispatching the edited plugin's own reload
+# command (e.g. '/kc reload'), or falling back to a safe config
+# re-read. We never disable+enable the plugin: on modern Paper
+# that closes its classloader and breaks it ("zip file closed").
+# Turn this off to only write the config and reload yourself.
+auto-reload: true
+
+# Debounce window. Several quick edits to the same plugin within
+# this many ticks (20 = 1s) collapse into a single reload, so a
+# burst of toggles only triggers one reload command.
+reload-delay-ticks: 40
+
+# Plugins listed here are still editable, but are NOT auto-
+# reloaded — their config is saved and applies on the next manual
+# reload / restart. Plugins without a reload command (e.g.
+# KawaiiWorlds, KawaiiLogger) only get a safe config re-read, so
+# field-cached settings there may need a restart regardless. Add
+# a plugin here if you'd rather reload it yourself.
+no-auto-reload: []

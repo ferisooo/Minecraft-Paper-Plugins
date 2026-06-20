@@ -1,0 +1,108 @@
+# ✿~ KawaiiRTP config ~✿
+#
+# /krtp picks a random spot in a ring around the player and teleports
+# them there once it finds dry, breathable ground. Tweak the ring size
+# below — anything that's not safe (water, lava, void, ocean biome,
+# magma, cactus, etc.) is rejected and another spot is rolled.
+
+# Smallest distance (in blocks, horizontal) the destination can be from
+# the player's current position. Stops /krtp from "teleporting" you
+# basically on top of yourself.
+min-distance: 500
+
+# Largest distance the destination can be from the player. Set this
+# equal to min-distance if you want a fixed-distance teleport instead
+# of a random ring.
+max-distance: 2000
+
+# How many random points to test before giving up. Bigger = better odds
+# of finding a spot in archipelago-heavy worlds, but slower in the
+# worst case.
+max-attempts: 40
+
+# Per-player cooldown in seconds between successful /krtp uses. 0 = no
+# cooldown. Players with kawaiirtp.bypass-cooldown ignore this.
+cooldown-seconds: 30
+
+# Players with this permission node ignore the cooldown. Listed here as
+# a reminder — actual permission is registered in plugin.yml.
+# kawaiirtp.bypass-cooldown
+
+# Don't land in water. Catches lakes, rivers, ponds, and any spot whose
+# top block happens to be water even outside ocean biomes.
+avoid-water: true
+
+# Don't land in ocean biomes (any biome whose name contains "ocean").
+# This is separate from avoid-water — a beach next to the ocean is
+# fine, but the actual ocean tiles get skipped.
+avoid-ocean: true
+
+# Worlds /krtp is allowed to roll a destination in. Leave this list
+# EMPTY (the default) to allow /krtp in EVERY world. The Nether and the
+# End are ALWAYS blocked automatically (by environment, so custom-named
+# nether/end worlds are caught too) — you don't need to list them here.
+# Add world names only if you want to restrict /krtp to a specific set.
+allowed-worlds: []
+
+# Worlds /krtp must NEVER teleport into, even if the player runs the
+# command from there. Useful if you keep a "lobby" world. (The Nether
+# and End are already blocked automatically and don't need listing.)
+blocked-worlds: []
+
+# Y range to clamp the destination to. The plugin still finds the
+# highest solid block at the chosen X/Z, but if that block is below
+# min-y or above max-y the spot is rejected. Keeps you out of the void
+# and off the nether ceiling.
+min-y: 50
+max-y: 250
+
+# Block types the player must NEVER stand on (case-insensitive Material
+# names). The plugin already rejects air, water, and lava — this list
+# is for the extra "stepping on it hurts" blocks. Pressure plates of
+# any material are caught by a built-in *_PRESSURE_PLATE rule, so they
+# don't need to be listed individually.
+unsafe-stand-blocks:
+  - LAVA
+  - FIRE
+  - SOUL_FIRE
+  - MAGMA_BLOCK
+  - CACTUS
+  - SWEET_BERRY_BUSH
+  - WITHER_ROSE
+  - CAMPFIRE
+  - SOUL_CAMPFIRE
+  - POWDER_SNOW
+  - LIGHT
+  - END_PORTAL
+  - NETHER_PORTAL
+  - END_GATEWAY
+
+# Biome names (case-insensitive, matches Bukkit biome keys) that are
+# always rejected even if the spot is otherwise safe. By default we
+# block deep_dark (no light, lots of warden) on top of the ocean
+# variants handled by avoid-ocean.
+blocked-biomes:
+  - deep_dark
+  - deep_cold_ocean
+  - deep_frozen_ocean
+  - deep_lukewarm_ocean
+  - deep_ocean
+  - cold_ocean
+  - frozen_ocean
+  - lukewarm_ocean
+  - ocean
+  - warm_ocean
+
+# Number of empty blocks needed above the destination so the player
+# doesn't suffocate. 2 = enough for a normal-height player.
+required-headroom: 2
+
+# Search-warmup ticks. Wait this many ticks after the command runs
+# before starting the async chunk loads, so the "✿ rolling..." chat
+# message has time to render.
+warmup-ticks: 4
+
+# Teleport flourish: a portal-particle puff + enderman whoosh where you
+# leave, and a reverse-portal/firework burst, sound and a "✦ Teleported ✦"
+# title where you land. Set false for a silent, plain teleport.
+teleport-effects: true

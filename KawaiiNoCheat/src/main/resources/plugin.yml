@@ -1,0 +1,21 @@
+name: KawaiiNoCheat
+version: ${project.version}
+main: com.ferisooo.kawaiinocheat.KawaiiNoCheat
+api-version: '1.21'
+author: Ferris
+description: Blocks cheat commands for non-bypass players with a cute popup.
+
+commands:
+  kawaiinocheat:
+    description: Reload KawaiiNoCheat config.
+    usage: /kawaiinocheat reload
+    aliases: [knc]
+    permission: kawaiinocheat.admin
+
+permissions:
+  kawaiinocheat.bypass:
+    description: Allowed to run the otherwise-blocked cheat commands.
+    default: op
+  kawaiinocheat.admin:
+    description: Reload the plugin config.
+    default: op

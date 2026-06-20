@@ -1,0 +1,72 @@
+name: KawaiiEssentials
+version: 1.0.0
+main: com.ferisooo.kawaiiessentials.KawaiiEssentials
+api-version: '1.21'
+author: Ferris
+description: Cute all-in-one essentials - homes, tpa, hub, back, starter kit, and a trash bin (drop-in, filter-by-type, and undo!).
+
+commands:
+  sethome:
+    description: Set a named home at your location (default name "home").
+    usage: /sethome [name]
+  home:
+    description: Teleport to one of your homes.
+    usage: /home [name]
+  homes:
+    description: List all of your homes.
+    usage: /homes
+  delhome:
+    description: Delete one of your homes.
+    usage: /delhome [name]
+  tpa:
+    description: Send a teleport request to another player (you go to them).
+    usage: /tpa <player>
+  tpahere:
+    description: Ask another player to teleport to you.
+    usage: /tpahere <player>
+  tpaccept:
+    description: Accept a pending teleport request.
+    usage: /tpaccept
+  tpdeny:
+    description: Deny a pending teleport request.
+    usage: /tpdeny
+  hub:
+    description: Teleport to the server hub.
+    usage: /hub
+  sethub:
+    description: Set the server hub to your current location.
+    usage: /sethub
+    permission: kawaiiessentials.sethub
+  back:
+    description: Teleport back to where you last died.
+    usage: /back
+  kit:
+    description: Claim a starter kit (30 minute cooldown).
+    usage: /kit
+  trash:
+    description: Open a trash bin, "/trash filter" to clear junk by type, or "/trash undo" to recover the last trashed batch.
+    usage: /trash [filter|undo]
+  setwarp:
+    description: Set a public player warp at your location.
+    usage: /setwarp <name>
+  delwarp:
+    description: Delete one of your own warps.
+    usage: /delwarp <name>
+  warp:
+    description: Teleport to a warp, or open the warps GUI with no name.
+    usage: /warp [name]
+  warps:
+    description: Open the warps GUI showing which players have warps set.
+    usage: /warps
+  kess:
+    description: Open the KawaiiEssentials menu (home, tpa, hub, back, kit, trash).
+    usage: /kess
+    aliases: [essentials]
+
+permissions:
+  kawaiiessentials.use:
+    description: Use the basic KawaiiEssentials player commands.
+    default: true
+  kawaiiessentials.sethub:
+    description: Set the server hub location.
+    default: op

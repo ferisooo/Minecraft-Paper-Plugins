@@ -1,0 +1,37 @@
+# ✿~ KawaiiThirst config ~✿
+#
+# A thirst stat that sits "above" hunger: it drains a little faster and hurts
+# more when empty. Shown as a boss bar (Minecraft can't add a bar above the
+# hunger row without a resource pack). Geyser renders it for Bedrock too.
+
+# Master on/off.
+enabled: true
+
+# Show the thirst boss bar at the top of the screen.
+show-bar: true
+
+# Max thirst (like 20 = 10 "drops").
+max-thirst: 20
+
+# How often thirst updates, in ticks (20 = 1s). Drain values below are PER
+# update, so with update-ticks: 60 they apply every 3 seconds.
+update-ticks: 60
+drain-per-update: 0.6
+
+# Drain multipliers.
+sprint-multiplier: 2.0       # sprinting parches you faster
+hot-biome-multiplier: 1.8    # deserts / nether / badlands etc.
+
+# Restoring thirst.
+water-restore: 1.5           # per update while standing in water
+water-bottle-restore: 6.0    # drinking a water bottle
+juicy-food-restore: 2.5      # eating apples/melon/berries/carrots etc.
+
+# Effects when low.
+low-threshold: 6             # at/below this: Slowness I
+critical-threshold: 3        # at/below this: Slowness II + Mining Fatigue
+dehydration-damage: 1.0      # damage per update at 0 thirst (half a heart)
+
+# Biome name fragments treated as "hot" (lowercase, substring match). Leave
+# empty to use the built-in default list.
+hot-biome-keywords: []

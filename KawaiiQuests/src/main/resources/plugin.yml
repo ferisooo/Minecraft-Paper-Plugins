@@ -1,0 +1,21 @@
+name: KawaiiQuests
+version: ${project.version}
+main: com.ferisooo.kawaiiquests.KawaiiQuests
+api-version: '1.21'
+author: Ferris
+description: AI-generated quests with an animated loot crate reward. Works for Java and Bedrock (via Geyser).
+
+commands:
+  kquest:
+    description: Open the quest menu.
+    aliases: [kq, kquests, quest]
+    usage: /kquest [abandon|reload]
+    permission: kawaiiquests.use
+
+permissions:
+  kawaiiquests.use:
+    description: Open the quest menu and take quests.
+    default: true
+  kawaiiquests.admin:
+    description: Use /kquest reload.
+    default: op

@@ -1,0 +1,108 @@
+# ============================================================================
+#  Herobrine — configuration
+#  Reload at runtime with /herobrine reload
+# ============================================================================
+
+general:
+  # Skin shown on the Herobrine NPC. Leave the texture blank for the default
+  # Steve skin (the plugin still adds a glowing outline below). To use a real
+  # Herobrine skin, paste a base64 texture value (and optional signature) from
+  # https://mineskin.org/ — the NPC will render whatever you provide here.
+  steve-skin-texture: ""
+  steve-skin-signature: ""
+  # Glowing outline that conveys the unnatural "white eyes" aura.
+  glowing-eyes: true
+  herobrine-name: "Herobrine"
+
+entity:
+  health: 500.0          # logical HP (player hits are ray-traced onto this)
+  speed: 0.45            # blocks moved per tick while hunting
+  follow-range: 128.0    # blocks within which he stays rendered / aware
+
+# ---- Passive stalking: random sightings that stare, then vanish ----
+stalking:
+  enabled: true
+  min-distance: 20
+  max-distance: 60
+  stare-seconds: 5
+  base-chance: 0.06              # per stalking check
+  night-multiplier: 2.0
+  storm-multiplier: 2.5
+  check-interval-ticks: 1200     # 60s between sighting attempts
+
+# ---- Threat: 0–100 score that escalates everything ----
+threat:
+  enabled: true
+  max: 100.0
+  mining-per-minute: 1.0
+  underground-per-minute: 1.5
+  sleep-increase: 3.0
+  death-increase: 5.0
+  distance-per-1000: 4.0         # threat gained per 1000 blocks from spawn
+  decay-per-minute: 0.5
+  thresholds:
+    sightings: 20
+    anomalies: 40
+    aggressive: 60
+    boss: 80
+
+# ---- Mysterious structures generated near players ----
+structures:
+  enabled: true
+  chance: 0.03                   # base chance per check (scales with threat)
+  check-interval-ticks: 2400     # 120s
+  min-distance: 24
+  max-distance: 64
+
+# ---- Abilities (shared by hunting + boss) ----
+abilities:
+  shadow-teleport-cooldown: 15   # seconds
+  lightning-damage: 16.0         # ~8 hearts
+  lightning-cooldown: 20         # seconds
+  darkness-radius: 16
+  darkness-duration: 8           # seconds
+  # Off by default — when on, he places ominous blocks (netherrack, redstone
+  # torches, warning signs). They now auto-revert so you never have to clean
+  # up by hand.
+  block-manipulation-enabled: false
+  block-revert-seconds: 45       # how long his placed/altered blocks last
+  melee-damage: 8.0
+
+# ---- Active hunting triggers ----
+hunting:
+  enabled: true
+  isolation-seconds: 300         # alone this long becomes a trigger
+  deep-cave-y: 20                # at/below this Y counts as "deep cave"
+
+# ---- Boss encounter ----
+boss:
+  enabled: true
+  health: 500.0
+  threshold: 80                  # threat required
+  require-midnight: true
+  require-storm: true
+  bar-title: "HEROBRINE HAS AWAKENED"
+  phase2-health-pct: 0.66        # drops to phase 2 below this fraction
+  phase3-health-pct: 0.33        # drops to phase 3 below this fraction
+  minion-count: 3
+  minion-lifespan-seconds: 30
+  spawn-chance: 0.25             # roll once conditions are met
+
+# ---- Ambient environmental effects while Herobrine is near ----
+environment:
+  enabled: true
+  cave-sounds: true
+  fog: true
+  animal-panic: true
+  door-interactions: true
+  compass-interference: true
+
+# ---- Messages (& colour codes supported) ----
+messages:
+  prefix: "&8[&fHerobrine&8] &7"
+  hunt-begin: "&8You feel a presence closing in..."
+  boss-start: "&4&lHEROBRINE HAS AWAKENED."
+  boss-phase: "&5Herobrine grows stronger... &7(phase {phase})"
+  boss-minions: "&8Shadows rise to serve him..."
+  boss-defeated: "&fHerobrine fades back into the code..."
+  boss-victory: "&4Herobrine claims another soul..."

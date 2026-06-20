@@ -1,0 +1,744 @@
+# ✿~ KawaiiCompanion config ~✿
+#
+# Each player gets one companion: a player-skinned NPC (NMS ServerPlayer)
+# that follows them around and chats via the DeepSeek API.
+#
+# IMPORTANT: don't commit this file with a real api-key in it. Either
+# leave api-key blank and set the DEEPSEEK_API_KEY environment variable
+# on the server, or paste your key here on the production box only.
+
+# ===== AI =====================================================
+
+# DeepSeek API key. Leave blank to fall back to the DEEPSEEK_API_KEY
+# environment variable. If neither is set the companion still follows
+# and gets summoned/dismissed, but /kc say replies with a "no key
+# configured" message.
+api-key: ""
+
+# DeepSeek chat-completions endpoint. Override only if you're proxying
+# through your own gateway.
+api-url: "https://api.deepseek.com/chat/completions"
+
+# Model name. deepseek-chat is the general-purpose chat model.
+model: "deepseek-chat"
+
+# Max tokens per reply. Keep it small so the companion stays chatty
+# rather than monologuing.
+max-tokens: 200
+
+# Sampling temperature, 0..2. 0.7 is a balanced default; bump for
+# wackier replies.
+temperature: 0.9
+
+# Per-request HTTP timeout (seconds). DeepSeek can be slow under load;
+# 30s is a sensible cap.
+http-timeout-seconds: 30
+
+# Per-player cooldown between /kc say invocations (milliseconds).
+# Keeps a single chatty player from burning your API quota.
+chat-cooldown-millis: 1500
+
+# ===== Memory =================================================
+
+# How many user+assistant turns to keep in the rolling history sent
+# back to DeepSeek. Older messages are dropped (the system prompt is
+# always kept). 20 turns ≈ 40 messages, which fits comfortably in the
+# context window for the deepseek-chat model.
+max-history-turns: 20
+
+# ===== Personality ============================================
+
+# The system prompt sent ahead of every conversation. {name} is
+# replaced with the companion's current name. Keep it short — long
+# system prompts eat into the reply budget.
+personality: |
+  You are {name}, a cheerful kawaii anime-style companion living in a
+  Minecraft world alongside your friend the player. You speak in
+  short, warm, slightly playful sentences (1–3 sentences max). You
+  use occasional cute interjections ("ehe~", "(✧)", "yay~") but you
+  don't overdo them. You stay in character: you're a companion in a
+  game, not an AI. If asked about the real world you answer briefly
+  and steer back to the adventure.
+
+# ===== Companion entity =======================================
+
+# Name shown above the companion's head when no per-player name has
+# been set via /kc rename.
+default-name: "Kohaku"
+
+# Hint for which skin to prefer when more than one is in skins/.
+# - if a player picked their own with /kc skin <name>, that wins
+# - else if this default is present + valid in skins/, that's used
+# - else the first valid skins/<name>.json alphabetically is used
+# - else the companion wears a blank head
+# Set to "" to skip the hint entirely (always go alphabetical).
+default-skin: ""
+
+# How close the companion tries to stay (blocks). It stops moving
+# when within this distance and starts again past it.
+follow-distance: 3.0
+
+# If the companion gets further than this from its owner (blocks), it
+# instantly teleports instead of walking. Catches falling-behind on
+# horseback / elytra.
+teleport-threshold: 24.0
+
+# Movement step per tick interval (blocks). 0.5 + 2-tick period gives
+# ~5 blocks/sec — between vanilla walk (~4.3) and sprint (~5.6), so
+# the companion keeps up unless you're sprinting in a straight line.
+move-step-blocks: 0.5
+
+# Ticks between movement updates. 2 = 10 Hz; raise to lower CPU at the
+# cost of choppier following. With smooth-move delta packets the
+# client interpolates between updates, so even 4 still looks fluid.
+movement-tick-period: 2
+
+# Splice the companion into the world's player list so mob target
+# selectors find her — zombies, skeletons, creepers, etc. will treat
+# her like a regular player and try to attack. She won't fight back
+# (no AI), so she takes damage like a punching bag.
+#
+# Trade-off: plugins that iterate `World.getPlayers()` will see her
+# too. Most read-only iteration is fine, but plugins that broadcast
+# to every world player (sending messages / packets directly) may
+# error against her dummy connection. Set this to false if your
+# server runs lots of world-broadcasting plugins and you start seeing
+# stack traces.
+world-integrated: true
+
+# Show the companion's name above its head?
+show-name-tag: true
+
+# Glow color when the companion is online — purely cosmetic. Set to
+# none to disable. Valid: WHITE, RED, BLUE, GREEN, YELLOW, AQUA,
+# LIGHT_PURPLE, GOLD, GRAY, DARK_GRAY, DARK_RED, DARK_GREEN,
+# DARK_BLUE, DARK_AQUA, DARK_PURPLE, BLACK, none
+glow-color: "LIGHT_PURPLE"
+
+# ===== Bedrock / real-entity companion (FEATURE 1) ============
+#
+# The default companion is an NMS fake-player, which Geyser CANNOT
+# render — Bedrock owners would see nothing. To fix that, Bedrock
+# owners are automatically given a REAL Bukkit mob companion instead
+# (detected via their Floodgate UUID). It's persistent, invulnerable,
+# silent, custom-named with its level, untargetable by mobs, and won't
+# pick up items. It follows you and teleports to catch up when far.
+#
+# • bedrock-real-entity: force the real-entity companion for EVERYONE
+#   (including Java players). Handy for testing or if you simply prefer
+#   a visible mob to the fake-player. Default false = only Bedrock
+#   owners get the real entity.
+#
+# • bedrock-companion-type: the DEFAULT mob form. Validated at spawn
+#   (EntityType.valueOf) with an ALLAY fallback if the name is invalid.
+#   Players can morph into any living mob via /companion skins or
+#   /companion form <mob> — see form-combat below.
+bedrock-real-entity: false
+bedrock-companion-type: "ALLAY"
+
+# ===== Mob forms & form combat (FEATURE 5) ====================
+#
+# The companion can morph into ANY living mob — wither, blaze, warden,
+# skeleton, cat... — via /companion form <mob> or the /companion skins
+# menu. Java owners can morph too and switch back with
+# /companion form human; Bedrock owners stay in mob forms (Geyser can't
+# render the fake-player). The chosen form persists across re-summons.
+#
+# Each form fights with its own attack style: wither → wither skulls,
+# skeleton/stray/bogged/pillager → arrows, blaze → fire bolts,
+# ghast → fireballs, warden → sonic boom, enderman → blink strikes,
+# creeper → boom bursts (no block damage!), shulker → bullets,
+# llama → spit, snow golem → snowballs, drowned → tridents,
+# witch/evoker/vex → magic, everything else → melee.
+#
+# Targeting is HOSTILE MOBS ONLY. A wither companion kills zombies and
+# creepers near you — never players, pets, villagers, passive animals,
+# or other players' companions. Companion attacks and explosions never
+# damage blocks, and mobs still can't target the companion herself.
+form-combat:
+  enabled: true
+  # How far (blocks) she scans around herself for hostile mobs (4-32).
+  range: 12.0
+  # Seconds between attacks. Style multipliers apply on top (warden
+  # sonic boom is much slower, llama spit faster, etc).
+  attack-period-seconds: 2
+  # Damage per hit in hearts, plus a bonus per companion level.
+  damage-hearts: 2.0
+  damage-per-level-hearts: 0.25
+
+# ===== Leveling & abilities (FEATURE 2) =======================
+#
+# Your companion gains XP and levels up over time and from combat.
+# Level + xp persist per owner. On level-up she announces with a
+# title + sound and her abilities scale / unlock.
+#
+# XP sources:
+#   • passive-xp-amount every passive-xp-period-seconds while summoned
+#   • xp-per-kill when YOU kill a mob within xp-kill-radius of her
+#
+# XP to go from level N to N+1 = xp-base + xp-per-level * (N-1).
+#
+# Abilities (each individually toggleable):
+#   • movement-speed: she follows / pathfinds faster at higher levels
+#   • heal-aura: from heal-aura-unlock-level on, she periodically tops
+#     up your HP when you're hurt and nearby (heart particles + chime)
+#   • combat-assist: she re-targets mobs that hit you (existing GUARD
+#     assist behavior; mobs can never target the real-entity companion)
+leveling:
+  enabled: true
+  # 0 = unlimited / indefinite leveling (default). Set a positive number to cap.
+  max-level: 0
+  xp-base: 30
+  xp-per-level: 20
+  xp-per-kill: 5
+  xp-kill-radius: 24.0
+  passive-xp-amount: 1
+  passive-xp-period-seconds: 30
+  abilities:
+    movement-speed: true
+    heal-aura: true
+    combat-assist: true
+    heal-aura-unlock-level: 3
+    heal-aura-period-seconds: 4
+    heal-aura-hearts: 1.0
+    heal-aura-range: 8.0
+
+# ===== Mount mode (FEATURE 4) =================================
+#
+# /companion mount (alias /companion ride) lets you ride the
+# REAL-ENTITY companion (entity.addPassenger). The NMS fake-player
+# can't be ridden — Java owners get a message pointing them at the
+# real-entity companion instead. Run the command again to dismount.
+#
+# While riding you steer her with your movement keys (needs a 1.21.3+
+# server for the input API): WASD to move, Space/Sneak for up/down when
+# the form can fly (allay, bee, ghast, parrot, phantom, vex, wither...)
+# or swim (dolphin, squid, guardian, turtle...). She keeps guarding while
+# ridden — her kill orders still land hits.
+allow-mount: true
+
+# Ride steering speeds (blocks per tick). land-speed is walking/jumping
+# forms; fly-speed is flying / in-water forms.
+ride:
+  land-speed: 0.42
+  fly-speed: 0.55
+
+# ===== Chat output ============================================
+
+# Where companion replies are shown. true = whisper-style, only the
+# owner sees the reply. false = broadcast to players within
+# broadcast-radius blocks.
+private-replies: true
+
+# Used only when private-replies is false.
+broadcast-radius: 16
+
+# ===== Name-triggered chat (#3) ===============================
+# When on, she replies to a normal chat message that contains her
+# CURRENT name — no /kc say needed. Rename her and she answers to
+# the new name automatically. The chat cooldown still applies.
+name-chat:
+  enabled: true
+
+# ===== Block guard (#2) =======================================
+# Keeps blocks near a spawned companion intact through explosions
+# (TNT, creeper, ghast, wither, end crystal, bed/anchor). Protected
+# blocks are never destroyed, so they keep their exact type — a
+# plank wall stays planks, not grass/stone. Only a small radius
+# around her is shielded; explosions farther away are unaffected.
+block-restore:
+  enabled: true
+  # Blocks within this many blocks of her are protected (1–32).
+  radius: 8.0
+  # Pop a little chat bubble when she shields something.
+  bubble: true
+
+# ===== PNG auto-upload (mineskin.org) =========================
+#
+# Drop a <name>.png into skins/ and the plugin will POST it to
+# mineskin.org and save the response as <name>.json next to it. After
+# that the auto-picker uses it like any other skin file. Set this to
+# false if you'd rather convert PNGs manually (e.g. on offline servers
+# or if you don't want the plugin reaching out to a 3rd-party API).
+auto-upload-pngs: true
+
+# Mineskin endpoint — leave alone unless you're proxying.
+mineskin-url: "https://api.mineskin.org/v2/generate"
+
+# Optional mineskin.org API key. The free anonymous tier was tightened
+# in 2026 to ~0 uploads per hour, which means PNGs you drop in skins/
+# may fail to convert. To fix:
+#   1. sign up (free) at https://account.mineskin.org/
+#   2. generate an API key
+#   3. paste it here (don't commit a real key to git!)
+# Leave blank for anonymous mode.
+mineskin-api-key: ""
+
+# After a failed upload (rate limit, timeout, 5xx) wait this long
+# before retrying that specific PNG. Mineskin's free tier is rate
+# limited so a sensible backoff keeps logs clean.
+mineskin-backoff-seconds: 60
+
+# ===== Companion equipment ====================================
+#
+# Cosmetic gear she spawns with. Default = no armor (just the skin).
+# Set wear-leather-armor: true to dye her in tinted leather. The tint
+# is a 6-digit RGB hex; a few starters: FFB4DC pink, AAB4FF lilac,
+# B4FFB4 mint, FFFFFF white.
+companion-equipment:
+  wear-leather-armor: false
+  leather-tint-color: "FFB4DC"
+  # Bag size shown when you sneak+right-click her, or click the
+  # Inventory button. Must be a multiple of 9, between 9 and 54.
+  # Default 27 = single chest. Bump to 54 for double-chest capacity.
+  inventory-size: 27
+
+# ===== Behavior modes (right-click GUI) =======================
+#
+# Right-clicking the companion opens a small control panel with four
+# modes: Follow / Stay / Guard / Scout. Sneak + right-click skips
+# straight to her inventory ("bag") for giving her items / a sword.
+#
+# Wandering radius for SCOUT mode (blocks). She picks random points
+# inside this radius around where you put her.
+scout-radius: 8.0
+
+# Scan radius for GUARD mode (blocks). She'll face + arm-swing at
+# the nearest hostile mob inside this distance.
+guard-radius: 16.0
+
+# Ticks between attack swings + damage applications. 12 ticks ≈ 1.6
+# attacks per second, roughly matching a vanilla player with no
+# cooldown. Raise for slower attacks; lower for faster (minimum 1).
+attack-cooldown-ticks: 12
+
+# Only target mobs she can actually SEE. When true (default) she
+# ray-traces to each hostile and ignores any blocked by a solid wall,
+# so she won't turn toward / path into walls chasing mobs through them
+# (which used to get her stuck). Set false for the old x-ray behavior.
+combat-require-line-of-sight: true
+
+# Detect and fight a live Herobrine (requires the optional Herobrine
+# plugin). When true (default), if Herobrine appears within her guard
+# radius — of her OR of you — she breaks off whatever she's doing,
+# walks up, and whittles down his health with her weapon until he's
+# gone. Harmless no-op if the Herobrine plugin isn't installed.
+fight-herobrine: true
+
+# /kc kill — order her to hunt targets near you.
+kill:
+  # How far around you she looks for targets.
+  radius: 24.0
+  # Allow /kc kill to target PLAYERS too (also requires the
+  # kawaiicompanion.kill.players permission). Set false to forbid PvP.
+  allow-players: true
+
+# Multiple companions — op-only "helper" drones (the chatting primary is
+# separate). Summon/dismiss them from her control GUI. Helpers obey the same
+# orders as the primary (mode, standby, hunt) but never chat.
+multiple:
+  max-helpers: 4
+
+# ===== Ranged combat (auto-bow vs flying mobs) ================
+#
+# When a hostile flying mob (Phantom, Ghast, Vex, Blaze, Wither,
+# Ender Dragon — or any grounded mob currently airborne and out of
+# melee reach) enters her threat range, she auto-equips a bow with
+# Power N + Infinity I and fires arrows at the configured cadence.
+# The bow + arrows are summoned at runtime, NOT taken from her bag,
+# so you don't need to give her any ammo. She drops the bow + swaps
+# back to a sword automatically when there's no flying threat.
+#
+# • bow-shoot-cooldown-ticks: ticks between shots (20 = 1 shot/sec,
+#   30 = ~1.5 sec, 10 = very fast)
+# • bow-power-level: 0-5. Adds bonus damage (vanilla Power V tops out
+#   at +2.5 damage)
+# • bow-detection-range: blocks she'll spot a flying threat from.
+#   Bump to 32+ for ghasts which can be very far away.
+# • bow-arrow-speed: vanilla full-charge arrow ≈ 3.0
+ranged-combat:
+  auto-equip-bow-vs-flying: true
+  bow-shoot-cooldown-ticks: 30
+  bow-power-level: 2
+  bow-detection-range: 32.0
+  bow-arrow-speed: 3.0
+
+# ===== Combat smarts ==========================================
+#
+# Higher-level combat behaviors that build on top of GUARD mode:
+#
+# • assist-owner: when something hits you, she re-targets it for
+#   `assist-memory-seconds` and chases it down (even if there are
+#   closer mobs).
+# • spotter: chat-bubble warnings when dangerous mobs are nearby.
+#   Currently calls out: phantom, ghast, creeper, wither, dragon,
+#   blaze, wither-skeleton, warden. Per-type cooldown so it doesn't
+#   spam — same warning won't fire again for `cooldown-seconds`.
+# • focus-fire: among all nearby mobs, prioritize the one currently
+#   targeting the owner (won't override boss / assist priority).
+# • boss-mode: against Wither / Ender Dragon, she uses
+#   `bow-cooldown-ticks` for faster shots. When the wither enters
+#   its low-HP grounded charging state, she auto-switches to her
+#   sword for 5sec at a time (since arrows are blocked while it's
+#   shielded). Default 15-tick cooldown = 1.3 shots/sec, vs the
+#   30-tick normal cooldown.
+combat-smarts:
+  assist-owner: true
+  assist-memory-seconds: 8
+
+  spotter:
+    enabled: true
+    range: 24.0
+    cooldown-seconds: 15
+
+  focus-fire: true
+
+  boss-mode:
+    enabled: true
+    bow-cooldown-ticks: 15
+
+# ===== SCOUT mode tuning ======================================
+#
+# When she finishes one scout target and is about to pick another,
+# she rolls `pause-chance` to decide whether to stop and look around
+# instead. Makes her feel less like a roomba, more like a curious
+# companion.
+scout:
+  pause-chance: 0.3
+  pause-min-seconds: 2
+  pause-max-seconds: 5
+
+# ===== Chat bubble ============================================
+#
+# When she speaks (DeepSeek reply, ambient chat, or status
+# announcements like "all done~"), the message also appears as a
+# floating text label above her head for `duration-seconds`. Set
+# `enabled: false` to keep replies in chat only.
+chat-bubble:
+  enabled: true
+  duration-seconds: 4
+
+# ===== Ambient chat ===========================================
+#
+# Every (interval-min..interval-max) seconds she'll randomly pick
+# one of `phrases` and "say" it (chat bubble + chat broadcast). Set
+# `enabled: false` to keep her quiet unless spoken to. Edit the
+# `phrases` list to taste — these are also good targets for skins.
+ambient-chat:
+  enabled: true
+  interval-min-seconds: 90
+  interval-max-seconds: 240
+  chat-radius: 16
+  phrases:
+    - "(✧)"
+    - "ehe~"
+    - "the wind feels nice..."
+    - "i wonder what's over there~"
+    - "hmm hmm ♪"
+    - "♡"
+    - "what should we do next?"
+    - "...sleepy ~"
+    - "is that a butterfly?"
+    - "fufu~"
+
+# ===== Pathfinding ============================================
+#
+# When she gets stuck on a wall or cliff she runs a small A* search
+# (capped at 800 nodes, sub-millisecond) and walks the resulting
+# waypoints. These flags decide what she's allowed to do mid-path.
+#
+# • open-doors: she opens wooden doors and fence gates as she walks
+#   through them. Iron doors are NEVER opened (they need redstone).
+#   Non-destructive, on by default.
+#
+# • break-soft-blocks: she breaks "plant"-class blocks blocking her
+#   path — cobwebs, vines, leaves, glow-lichen, ferns, sugar cane,
+#   bamboo, saplings. Drops are produced normally and a
+#   BlockBreakEvent fires (so WorldGuard / GriefPrevention can
+#   cancel). OFF by default — destructive on shared servers.
+#
+# • allow-tunneling: she'll dig through dirt, sand, gravel, snow,
+#   clay, mud, mycelium, podzol, moss when no other route exists.
+#   Stone/wood/glass/ores are NEVER touched. Same BlockBreakEvent
+#   path so protection plugins still apply. STRONGLY OFF by default
+#   — even with the safety filter this is the option that lets her
+#   carve a hole through the side of someone's hill to reach you.
+#
+# • swim-cost-multiplier: cost penalty for water cells. 3.0 means
+#   she'll cut across small ponds but walk around big ones. Set to
+#   1.0 to make swimming free (she'll path through water happily);
+#   set very high (10+) to make her almost never swim.
+#
+# • block-break-cost: extra step cost added per block layer she has
+#   to break through. Higher = stronger preference for clear routes.
+#   4.0 means breaking 2 blocks of dirt costs as much as walking 8
+#   blocks around — usually keeps tunneling reserved for "no other
+#   way" situations.
+pathfinding:
+  open-doors: true
+  break-soft-blocks: false
+  allow-tunneling: false
+  swim-cost-multiplier: 3.0
+  block-break-cost: 4.0
+  # Smooth her movement: collapse the blocky A* grid path into straight
+  # diagonal runs (string-pulling). Off by default — it can interact badly
+  # with stairs/descents. Set true to experiment.
+  smooth: false
+  # Smart navigator: while FOLLOWING, an invisible mob does the game's NATIVE
+  # pathfinding (proper stairs, jumps, ledges, gaps) and the visible Kohaku
+  # mirrors it. Fixes the float/stuck/door problems. Set false to use the old
+  # hand-rolled A* follow instead.
+  smart-navigator: true
+
+# ===== Behavior extras =========================================
+#
+# Smarter physics + poses + personality on top of the base
+# follow/stay/guard/scout behavior. All defaults are ON because
+# the new behavior is what the plugin's tuned for now — flip any
+# individual flag off if you preferred the old, simpler version.
+#
+# • sprint-when-falling-behind: when she's further than
+#   sprint-trigger-distance from you in FOLLOW, she enables the
+#   sprint flag (so the client renders sprint particles + faster
+#   animation) AND speeds up by sprint-move-step-multiplier so
+#   she actually catches up instead of trailing forever.
+#
+# • edge-guard-in-scout: rejects SCOUT wander targets that would
+#   require dropping more than edge-guard-max-drop blocks below
+#   the anchor — keeps her from wandering off cliffs or down
+#   ravines while you're not looking. 5 retry attempts before
+#   falling back to the last candidate, so she never freezes.
+#
+# • ladder-climbing: when she's standing on a LADDER / VINE /
+#   SCAFFOLDING / TWISTING_VINES / WEEPING_VINES / CAVE_VINES
+#   and her target is mostly above her, she steps vertically up
+#   the climbable column instead of trying to walk into it.
+#
+# • greet-wave: when you walk back into greet-wave-trigger-distance
+#   after being further away, she swings her main hand once as a
+#   "hi! welcome back!" wave. Throttled by greet-wave-cooldown so
+#   yo-yo'ing in/out of range doesn't spam waves.
+#
+# • pre-sleep-yawn: 1 second before SLEEPING in STAY mode, she
+#   does a brief crouch + arm-swing so the doze-off reads as
+#   "yawn → settle in" instead of a hard pose snap.
+#
+# • random-idle-fidgets: small arm swings layered onto idleLook,
+#   so a STAY/SCOUT companion looks alive instead of frozen
+#   between head turns.
+#
+# • look-at-nearby-entities: in STAY/SCOUT, she occasionally
+#   tracks a nearby non-hostile mob/player with her head ("ooh,
+#   chickens"). Skips hostiles (those have their own combat
+#   handling) and the owner (head-track-owner-in-stay handles
+#   that).
+#
+# • head-track-owner-in-stay: in STAY, when you're within 12
+#   blocks, ~60% of her idle ticks she'll turn to look at you
+#   instead of doing a random head turn. Reads as "she's
+#   watching you craft / build".
+#
+# • hop-on-step-up: small upward bob on the frame she steps up
+#   onto a higher block (fence, slab, stair). A genuine little
+#   hop — NOT an arm-swing (that's the attack animation and made
+#   her look like she was punching the air). Throttled to one
+#   hop per ~6 ticks so a long staircase doesn't bob every step.
+behavior-extras:
+  sprint-when-falling-behind: true
+  sprint-trigger-distance: 7.0
+  sprint-move-step-multiplier: 1.6
+
+  edge-guard-in-scout: true
+  edge-guard-max-drop: 4
+
+  ladder-climbing: true
+
+  greet-wave: true
+  greet-wave-trigger-distance: 12.0
+  greet-wave-cooldown-seconds: 20
+
+  pre-sleep-yawn: true
+
+  random-idle-fidgets: true
+
+  look-at-nearby-entities: true
+  look-at-entity-radius: 8.0
+
+  head-track-owner-in-stay: true
+
+  hop-on-step-up: true
+
+# ===== Smarts (escape, monitoring, AI context) ================
+#
+# Higher-level smarts that build on top of the basic behavior.
+# All defaults are ON because the new behavior is what the plugin's
+# tuned for now — flip individual flags off to disable a piece.
+#
+# • stuck-escape: when she gets walled-in, buried, or stuck in a
+#   1-block dip the path system can't get out of, she'll dig her
+#   way out (head block first, then up, then diagonal toward the
+#   target). Each broken block fires a normal BlockBreakEvent
+#   attributed to the owner, so WorldGuard / GriefPrevention still
+#   apply. If she can't dig free within timeout-seconds OR breaks
+#   max-blocks worth without progress, she emergency-teleports
+#   back to the owner with an apology bubble.
+#
+#   - allow-stone-break: opt-in flag for breaking natural stone
+#     (cobble, deepslate, andesite, etc.) during escape. Off by
+#     default because even though it's natural rock, it can include
+#     someone's mineshaft floor on shared servers. With it off she
+#     can still dig dirt/sand/gravel/snow/etc.
+#
+# • player-state-monitor: she watches your HP/hunger/fire/air and
+#   chat-bubbles a contextual warning when one of them drops past
+#   threshold. Edge-triggered (only fires on the transition) so a
+#   prolonged low-HP fight doesn't spam warnings.
+#
+# • deepseek-context: stuffs a per-call snapshot of your current
+#   surroundings (location, biome, time, your stats, her bag,
+#   nearby creatures) into the system prompt. Costs ~150-300
+#   extra tokens per /kc say but makes her replies dramatically
+#   more contextual ("ooh, those chickens look hungry too").
+#   Disable to save tokens or if your DeepSeek quota is tight.
+smarts:
+  stuck-escape:
+    enabled: true
+    # Stuck-ticks past which escape mode triggers. Should be > the
+    # normal repath threshold (6) — 24 = ~1.2 seconds at 20 Hz.
+    trigger-ticks: 24
+    timeout-seconds: 6
+    max-blocks: 12
+    # If escape times out, DON'T warp her back to you (default false) — a
+    # sudden teleport-to-owner whenever she's briefly stuck is jarring.
+    # She'll re-path instead, and still catch up via the normal far-away
+    # teleport. Set true to restore the old warp-when-stuck behavior.
+    emergency-teleport-on-timeout: false
+    allow-stone-break: false
+
+  player-state-monitor:
+    enabled: true
+    warn-cooldown-seconds: 12
+    low-hp-threshold: 6.0
+    low-food-threshold: 6
+
+  deepseek-context:
+    enabled: true
+    include-nearby-mobs: true
+    include-inventory: true
+
+# ===== Smarts: stuck-escape, player state, DeepSeek context =====
+#
+# These are the "she actually pays attention" features. All three are
+# independent and can be toggled separately.
+#
+# • stuck-escape: when she gets pinned in a hole / suffocated /
+#   surrounded by blocks she can't path around, she enters a small
+#   dig-out state machine and breaks her way to the surface. After
+#   timeout-seconds or max-blocks of digging she emergency-teleports
+#   to the owner with a short apology bubble. The break events fire
+#   real BlockBreakEvents attributed to the owner, so protection
+#   plugins (GriefPrevention / WorldGuard) still apply.
+#
+#   • allow-stone-break: when on, she's allowed to break natural
+#     stone (cobble, deepslate, netherrack…) in escape mode only.
+#     With this off, she'll only dig dirt-class blocks and may
+#     hit the timeout faster in a stone-sealed cavity. Player-
+#     built blocks (wood, slabs, stairs, walls, doors, beds, ores)
+#     are NEVER touched even with this on.
+#
+# • player-state-monitor: she watches the owner's HP, hunger, fire
+#   ticks and air. When one crosses a threshold she bubbles a short
+#   contextual line ("you're hurt!", "come up come up~"). Throttled
+#   so a long fight isn't a wall of bubbles.
+#
+# • deepseek-context: builds a short situational summary (your
+#   location/biome, time of day, weather, vital stats, what's in
+#   her bag, nearby creatures) and stuffs it into the system prompt
+#   of every /kc say. Makes her replies feel grounded — she'll
+#   reference the actual cow next to you instead of inventing one.
+#   Adds ~150-300 tokens per chat round.
+smarts:
+  stuck-escape:
+    enabled: true
+    # How many ticks past the normal stuck-repath threshold (6) before
+    # escape mode kicks in. Default 12 = ~0.6s of being motionless after
+    # the normal repath fails. If she's actually suffocating (head/foot
+    # in a solid block) she fast-tracks at ~3 ticks regardless of this.
+    trigger-ticks: 12
+
+    # ⏱️  HOW LONG until she gives up digging and teleports back to you.
+    # This is the "ehe~ stuck..." timer — increase if you want her to
+    # try longer before resorting to the teleport, decrease to make her
+    # rescue herself faster. Range 1-30, default 6.
+    timeout-seconds: 6
+
+    # Max blocks she's allowed to break per escape attempt — safety cap
+    # so a runaway escape can't carve a tunnel across someone's base.
+    max-blocks: 12
+    # If escape times out or hits the block budget without freeing her,
+    # warp her to the owner. Default false — the sudden teleport-when-stuck
+    # is jarring; she'll re-path and still catch up via the normal far-away
+    # teleport. Set true to restore the old warp-when-stuck behavior.
+    emergency-teleport-on-timeout: false
+    # Allow breaking natural stone (cobble, deepslate, netherrack, …)
+    # during escape only. Player-built blocks are still protected.
+    allow-stone-break: true
+
+  player-state-monitor:
+    enabled: true
+    # Min seconds between any two state-warning bubbles. 4 = at most
+    # one every 4s even if multiple stats are below threshold.
+    warn-cooldown-seconds: 4
+    # HP at or below this triggers "you're hurt!" (out of 20).
+    low-hp-threshold: 8
+    # Food at or below this triggers "you should eat" (out of 20).
+    low-food-threshold: 6
+
+  deepseek-context:
+    enabled: true
+    # Include up to 3 nearby creature types in the snapshot.
+    include-nearby-mobs: true
+    # Include a summary of her bag contents (best weapon, food,
+    # totem, …). Capped at ~5 categories so the prompt stays short.
+    include-inventory: true
+
+  # #1: when you ask "where is the nearest village/stronghold/…",
+  # how far (in CHUNKS) she scans for it. 100 chunks ≈ 1600 blocks.
+  # Bigger = finds farther structures but each lookup costs more, so
+  # keep it modest. Range 8–400.
+  structure-search-chunks: 100
+
+# ===== Item & XP pickup =========================================
+#
+# Lets her vacuum up nearby dropped items + xp orbs while she's
+# walking around with you. Cheap (one bounded entity scan every
+# few ticks) and the pickup itself uses her existing companion
+# inventory — same one you can right-click open.
+#
+# • XP orbs are awarded to the OWNER (you) since the companion
+#   doesn't have a real player level. Reads as "she's collecting
+#   xp for you".
+#
+# • discard-overflow-when-full: when ON, items get picked up even
+#   when her bag is full and the excess is silently discarded —
+#   useful so loot isn't left rotting on the ground when you're
+#   in a fight. Turn OFF to make her ignore items she can't fully
+#   hold.
+#
+# • respect-vanilla-pickup-delay: when ON, she won't snatch items
+#   YOU just dropped before you have a chance to pick them back
+#   up. Leave on unless you want her grabbing things instantly.
+pickup:
+  enabled: true
+  # Pickup radius in blocks. Vanilla player default is ~1.0; we
+  # default to 2.0 so items rolling near her get caught reliably.
+  radius: 2.0
+  # How many movement ticks between scans. 1 = every tick (most
+  # responsive), 2 = every other (default), higher = laggier.
+  scan-interval-ticks: 2
+  # Pick up items even when her bag is full. Excess items vanish.
+  discard-overflow-when-full: true
+  # Award nearby xp orbs to the owner (you).
+  collect-xp-orbs: true
+  # Honor vanilla's "freshly-dropped item" 10-tick no-pickup window.
+  respect-vanilla-pickup-delay: true

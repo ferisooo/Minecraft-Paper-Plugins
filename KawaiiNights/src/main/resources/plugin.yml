@@ -1,0 +1,21 @@
+name: KawaiiNights
+version: ${project.version}
+main: com.ferisooo.kawaiinights.KawaiiNights
+api-version: '1.21'
+author: Ferris
+description: Extra hostile mobs spawn any time/weather/biome (more at night), and hostiles don't burn in daylight.
+
+commands:
+  knights:
+    description: KawaiiNights info / raid / reload.
+    aliases: [kawaiinights]
+    usage: /knights [raid [mob]|reload]
+    permission: kawaiinights.use
+
+permissions:
+  kawaiinights.use:
+    description: View KawaiiNights info.
+    default: true
+  kawaiinights.admin:
+    description: Reload KawaiiNights config.
+    default: op

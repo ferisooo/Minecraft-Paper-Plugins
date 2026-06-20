@@ -1,0 +1,14 @@
+# ✿~ KawaiiReload config ~✿
+# Set to false to refuse `/kreload server` (full server restart).
+# Restart uses Bukkit.spigot().restart() which needs a `restart-script`
+# configured in spigot.yml — without one the server simply stops.
+allow-server-restart: true
+
+# Set to false to refuse `/kreload all` (reload every plugin in one go).
+# Mass reload is the riskiest operation: any plugin that doesn't tolerate
+# mid-life disable/enable can leave dangling listeners or scheduled tasks.
+allow-mass-reload: true
+
+# Ticks to wait between the chat reply and the actual restart command,
+# so the player has time to read the message before the server goes down.
+restart-delay-ticks: 20

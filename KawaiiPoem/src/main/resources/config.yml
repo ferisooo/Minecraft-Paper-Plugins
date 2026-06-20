@@ -1,0 +1,50 @@
+# ============================================================
+#  KawaiiPoem
+#  Type your own End-Poem-style credits below. When a player
+#  runs /kpoem the lines are revealed one at a time on their
+#  screen, drifting upward like the vanilla end poem.
+# ============================================================
+
+# Ticks to wait between each revealed line (20 ticks = 1 second).
+line-delay-ticks: 30
+
+# Push a screen of blank lines first so the poem starts on a clean screen.
+clear-screen: true
+
+# If a line has no & colour code of its own, auto-alternate between the two
+# colours below (the vanilla poem alternates between two speakers).
+alternate-colors: true
+color-a: GREEN
+color-b: LIGHT_PURPLE
+
+# Roughly centre each line by padding it. 0 = no centring.
+# Try ~40 for a poem-like centre column.
+center-width: 0
+
+# Optional big title shown when the poem starts (leave blank to skip).
+start-title: "&d✧ The End ✧"
+start-subtitle: "&7...for now"
+
+# Sounds (Minecraft sound keys). Leave blank to disable.
+start-sound: "minecraft:ui.toast.challenge_complete"
+sound-volume: 0.8
+sound-pitch: 1.0
+
+# ------------------------------------------------------------
+#  YOUR POEM — edit these lines to whatever you want players
+#  to read. Supports & colour codes (e.g. "&bhello").
+#  Use an empty "" for a blank spacer line.
+# ------------------------------------------------------------
+lines:
+  - "I see the player you mean."
+  - "&7Billy?"
+  - "Yes. Take care. It has reached a higher level now."
+  - "It can read our thoughts."
+  - ""
+  - "&7Does it know we love it? That the universe is kind?"
+  - "Sometimes, through the noise of its own thoughts, it hears the universe, yes."
+  - ""
+  - "&dYou are dreaming now, dreamer."
+  - "&dWake up. The kawaii world is waiting for you."
+  - ""
+  - "&dwww.your-server.net"

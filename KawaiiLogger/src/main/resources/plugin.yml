@@ -1,0 +1,6 @@
+name: KawaiiLogger
+version: 1.3.1
+main: com.ferisooo.kawaiilogger.KawaiiLogger
+api-version: '1.21'
+author: Ferris
+description: Kawaii Discord webhook logger for Minecraft events ✨

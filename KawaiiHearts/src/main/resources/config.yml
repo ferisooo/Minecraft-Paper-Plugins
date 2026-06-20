@@ -1,0 +1,69 @@
+# ✿~ KawaiiHearts config ~✿
+#
+# Floats a cute health bar above every mob's head using its custom name.
+
+# Master on/off switch.
+enabled: true
+
+# When to show the bar:
+#   always  = show on every nearby mob, all the time
+#   damaged = only show while a mob is hurt; restore its normal name at full hp
+mode: always
+
+# How many heart icons make up a FULL bar. The mob's health is scaled to
+# this many hearts regardless of its real max. Kept small (3) so a screen
+# full of mobs doesn't look crazy — the number next to it shows exact hp. 1-40.
+max-hearts: 3
+
+# Show the literal "current/max" numbers after the hearts? Recommended ON
+# when max-hearts is small, since 3 hearts alone is pretty coarse.
+show-number: true
+
+# ===== View radius =====
+#
+# Only label mobs within this many blocks of a player; hide the bar again
+# once everyone walks away. Keeps mob farms / big herds from filling the
+# screen with hearts. Set to 0 for no limit.
+#
+# NOTE: the vanilla client only draws name tags within ~64 blocks anyway,
+# so values above ~64 don't add anything.
+view-radius: 24
+
+# How often (in ticks, 20 = 1s) to re-scan which mobs are near players.
+# Lower = snappier show/hide, higher = lighter on the server. Minimum 1.
+scan-interval-ticks: 20
+
+# The icons + colors. Color codes use '&' (e.g. &d = pink, &c = red,
+# &7 = gray, &f = white). Swap the hearts for anything you like!
+full-heart: "❤"
+empty-heart: "♡"
+full-color: "&d"     # pink filled hearts ✿ (used only when health-gradient is off)
+empty-color: "&7"    # gray empty hearts
+number-color: "&f"   # white numbers
+
+# ===== Health color gradient =====
+#
+# When true, the FILLED hearts are tinted by the mob's current health %,
+# sliding from `gradient-low` (near death) through `gradient-mid` (~half) to
+# `gradient-high` (near full). This overrides `full-color`. Set false to keep
+# a single flat `full-color` instead.
+health-gradient: true
+gradient-high: "#55ff55"   # near-full HP  (hex #rrggbb) — green
+gradient-mid:  "#ffe14d"   # around half   — yellow
+gradient-low:  "#ff5555"   # near death    — red
+
+# Keep player-applied name tags? If true, a mob you named "Mr Whiskers"
+# shows  ->  Mr Whiskers ❤❤♡ 14/20
+# and the name is fully restored if the bar is ever removed.
+preserve-name-tags: true
+
+# Entity types to SKIP entirely (names from the Bukkit EntityType enum).
+blacklist:
+  - ARMOR_STAND
+#  - VILLAGER
+
+# If this list is NON-empty, ONLY these types get a health bar
+# (everything else is ignored). Leave empty to cover all mobs.
+only-types: []
+#  - ZOMBIE
+#  - SKELETON

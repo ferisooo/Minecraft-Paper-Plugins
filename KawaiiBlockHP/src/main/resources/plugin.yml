@@ -1,0 +1,22 @@
+name: KawaiiBlockHP
+version: ${project.version}
+main: com.ferisooo.kawaiiblockhp.KawaiiBlockHP
+api-version: '1.21'
+author: Ferris
+description: Shows a depleting HP bar while a block is being mined / broken.
+load: POSTWORLD
+
+commands:
+  kblockhp:
+    description: Toggle the block HP bar / reload its config.
+    aliases: [kbhp, blockhp]
+    usage: /kblockhp <on|off|toggle|reload>
+    permission: kawaiiblockhp.use
+
+permissions:
+  kawaiiblockhp.use:
+    description: Show the block HP bar while mining.
+    default: true
+  kawaiiblockhp.admin:
+    description: Reload KawaiiBlockHP config.
+    default: op

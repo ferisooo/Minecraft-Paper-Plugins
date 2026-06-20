@@ -1,0 +1,162 @@
+# ✿~ KawaiiSkyblock config ~✿
+#
+# Each player gets their own island world, made by COPYING a saved template
+# world folder into a fresh world named kawaii_isle_<id>. /island create clones
+# it and warps you there; /island delete confirm wipes it.
+
+# Name of the template world FOLDER. Place this folder in the Bukkit world
+# container (the server root, next to your "world/" folder). The plugin copies
+# it for every new island. (uid.dat / session.lock are stripped from the copy.)
+template-world: "SKYBLOCK ISLAND ADVANCED"
+
+# ✿ Ender chests are disabled inside kawaii_isle_* worlds when true (right-click
+#   and inventory-open are both blocked). Set false to allow them.
+disable-enderchest: true
+
+# ✿ Auto-purge of inactive islands ✿
+# Idle island worlds are unloaded from memory automatically when their last
+# player leaves (the folder stays on disk — this just frees RAM/ticking).
+#
+# Purging goes further: it permanently DELETES the island folder of owners who
+# have been inactive too long. Because that destroys player builds, it is
+# OPT-IN and DISABLED by default.
+purge:
+  # Delete islands whose owner hasn't logged in for this many days.
+  #   0 = DISABLED (default). e.g. set to 30 to delete islands of owners who
+  #   haven't been seen in 30 days. Online owners are never purged, and
+  #   pre-existing islands with no recorded last-seen are treated as "seen now"
+  #   on first load so they aren't deleted immediately after enabling this.
+  inactive-days: 0
+  # How often (in hours) to scan for inactive islands to purge.
+  check-hours: 6
+
+# ✿ Upgradable cobblestone generator ✿
+# When lava + water would form cobblestone/stone inside an island, the plugin
+# rolls a chance (based on the island's generatorLevel) to instead form a rarer
+# block. Chances per level are cumulative across the list and are 0..1; whatever
+# probability is left over stays plain cobblestone. Higher level = better ores.
+generator:
+  enabled: true
+  max-level: 5
+  # ✿ Upgrade cost ✿ — upgrading the generator now COSTS items, paid from the
+  # player's inventory. Cost to go from level L → L+1 is:
+  #     upgrade-cost-base + upgrade-cost-per-level * L
+  # With the defaults below (base 2, per-level 2): L1→2 = 4, L2→3 = 6, L3→4 = 8,
+  # L4→5 = 10 diamonds. upgrade-cost-item is any Material name (falls back to
+  # DIAMOND if unknown). Set per-level to 0 for a flat cost of just the base.
+  upgrade-cost-item: DIAMOND
+  upgrade-cost-base: 2
+  upgrade-cost-per-level: 2
+  levels:
+    # level: list of "MATERIAL:chance"
+    1:
+      - "COAL_ORE:0.05"
+    2:
+      - "COAL_ORE:0.08"
+      - "IRON_ORE:0.04"
+    3:
+      - "COAL_ORE:0.10"
+      - "IRON_ORE:0.07"
+      - "GOLD_ORE:0.03"
+      - "GLOWSTONE:0.01"
+    4:
+      - "COAL_ORE:0.10"
+      - "IRON_ORE:0.09"
+      - "GOLD_ORE:0.05"
+      - "DIAMOND_ORE:0.02"
+      - "OBSIDIAN:0.02"
+      - "GLOWSTONE:0.02"
+    5:
+      - "COAL_ORE:0.10"
+      - "IRON_ORE:0.10"
+      - "GOLD_ORE:0.07"
+      - "DIAMOND_ORE:0.04"
+      - "EMERALD_ORE:0.02"
+      - "OBSIDIAN:0.03"
+      - "GLOWSTONE:0.03"
+      - "MYCELIUM:0.01"
+
+# ✿ Environment flags (data-driven, 16) ✿
+# These are the SAFE DEFAULTS applied to a brand-new island. Per-island toggles
+# are stored in islands.yml and edited via /is flags (a PAGED Flags GUI). Any key
+# omitted here uses the plugin's built-in default. A flag being TRUE means the
+# action is ALLOWED on the island; FALSE means it is suppressed/blocked.
+#
+# Only these 16 flags have any in-game effect; everything else is vanilla.
+# Convention: protective/destructive flags default OFF (explosions, fire*, pvp,
+# *_explosions, entity_grief, lightning); natural growth/spread default ON;
+# damage-cause flags default ON.
+flag-defaults:
+  # --- combat / explosions / fire (default OFF) ---
+  pvp: false
+  tnt_explosions: false
+  creeper_explosions: false
+  explosion_block_damage: false
+  fire_spread: false
+  fire_burn: false
+  fire_ignite: false
+  # --- entities ---
+  entity_grief: false
+  natural_breeding: true
+  # --- weather ---
+  lightning_strike: false
+  weather_change: true
+  # --- natural growth / spread (default ON) ---
+  leaf_decay: true
+  crop_growth: true
+  # --- world mechanics ---
+  liquids_flow: true
+  fall_damage: true
+  portal_create: true
+
+# ✿ Role → permission defaults (data-driven, ~120) ✿
+# The per-island MEMBER-permission system (SimpleClaimSystem-style) is SEPARATE
+# from the environment flags above. Effective allowance for a player = the island
+# owner / kawaiiskyblock.admin always pass; otherwise the player's ROLE on that
+# island must grant the permission. These defaults can be tuned per role here and
+# overridden per-island via the in-game Permissions editor (/is perms — a paged,
+# per-role GUI). Keys omitted for a role fall back to the plugin's built-in
+# defaults (COOP = all, MEMBER = nearly all, VISITOR = only passive things
+# like eat).
+#
+# Only the keys you want to OVERRIDE need to appear here. Example below grants the
+# common visitor-friendly perms and shows the structure; uncomment / extend as
+# desired. LEADER always has every permission and is not listed.
+roles:
+  coop:
+    # COOP defaults to everything; deny something by setting it false, e.g.:
+    # interact_vault: false
+  member:
+    # MEMBER defaults to nearly everything; deny something by setting it false.
+  visitor:
+    interact_bed: false
+    eat: true
+    # everything else for VISITOR defaults to false (locked down)
+
+# ✿ Leaderboard / island level ✿
+# Island level = (sum of block-values inside a capped bounding box around the
+# island spawn) / points-per-level. Scanning is expensive, so it is throttled:
+# /is level recomputes on demand; a periodic task recomputes loaded islands at
+# most once every recompute-minutes. The bounding box is capped by scan-radius
+# and the min/max Y below so a single scan can't lag the server.
+leaderboard:
+  points-per-level: 100
+  recompute-minutes: 5
+  scan-radius: 48
+  scan-min-y: 60
+  scan-max-y: 140
+  block-values:
+    DIAMOND_BLOCK: 100
+    EMERALD_BLOCK: 80
+    NETHERITE_BLOCK: 150
+    GOLD_BLOCK: 40
+    IRON_BLOCK: 10
+    REDSTONE_BLOCK: 6
+    LAPIS_BLOCK: 6
+    COAL_BLOCK: 4
+    DIAMOND_ORE: 12
+    EMERALD_ORE: 12
+    GOLD_ORE: 5
+    IRON_ORE: 3
+    BEACON: 200
+    ENCHANTING_TABLE: 25

@@ -1,0 +1,104 @@
+# ✿~ KawaiiShop config ~✿
+
+# Worlds whose names start with this prefix count as "skyblock" worlds. The
+# shop only opens there, and the banned-item rules below only apply there.
+# (KawaiiSkyblock names island worlds "kawaii_isle_<owner>".)
+skyblock-world-prefix: 'kawaii_isle_'
+
+# Coins every player starts with the first time they're seen.
+starting-balance: 100
+
+# Symbol shown next to amounts in messages and the GUI.
+currency-symbol: '✦'
+
+# Items a player must NOT be able to use to smuggle items out of skyblock
+# into the normal world. The classic offender is the ENDER_CHEST, whose
+# contents are shared across every world. While standing in a skyblock world
+# these items can't be opened or placed (admins with kawaiishop.admin bypass).
+banned-in-skyblock:
+  - ENDER_CHEST
+
+# ── Shop catalogue, grouped into categories ─────────────────────────────────
+# Each category has a display name, an icon (Material) for the category menu,
+# and an "items" map. Each item: MATERIAL: { buy: <coins>, sell: <coins> }
+#   buy  -1  -> cannot be bought (sell-only)
+#   sell -1  -> cannot be sold (buy-only)
+# Prices are tuned by rarity / how hard the item is to get on an island.
+# Selling always pays less than buying, so you can't farm the spread.
+# IMPORTANT: keep a space after every colon (YAML needs "KEY: { ... }").
+shop:
+  blocks:
+    name: '&aBlocks'
+    icon: GRASS_BLOCK
+    items:
+      DIRT: { buy: 2, sell: 1 }
+      COBBLESTONE: { buy: 2, sell: 1 }
+      NETHERRACK: { buy: 3, sell: 1 }
+      GRAVEL: { buy: 4, sell: 1 }
+      SAND: { buy: 6, sell: 2 }
+      RED_SAND: { buy: 8, sell: 2 }
+      CLAY_BALL: { buy: 6, sell: 2 }
+      GLASS: { buy: 6, sell: 2 }
+      OAK_LOG: { buy: 8, sell: 3 }
+      OAK_SAPLING: { buy: 20, sell: 5 }
+      ICE: { buy: 5, sell: 2 }
+      OBSIDIAN: { buy: 100, sell: 40 }
+      SPONGE: { buy: 250, sell: 100 }
+      PACKED_ICE: { buy: 40, sell: 16 }
+      BLUE_ICE: { buy: 300, sell: 120 }
+      SOUL_SAND: { buy: 25, sell: 10 }
+  ores:
+    name: '&bOres & Minerals'
+    icon: IRON_INGOT
+    items:
+      COAL: { buy: 15, sell: 6 }
+      CHARCOAL: { buy: 15, sell: 6 }
+      RAW_COPPER: { buy: 18, sell: 7 }
+      COPPER_INGOT: { buy: 30, sell: 12 }
+      RAW_IRON: { buy: 40, sell: 16 }
+      IRON_INGOT: { buy: 60, sell: 24 }
+      RAW_GOLD: { buy: 55, sell: 22 }
+      GOLD_INGOT: { buy: 80, sell: 32 }
+      REDSTONE: { buy: 20, sell: 8 }
+      LAPIS_LAZULI: { buy: 25, sell: 10 }
+      QUARTZ: { buy: 20, sell: 8 }
+      GLOWSTONE_DUST: { buy: 30, sell: 12 }
+      AMETHYST_SHARD: { buy: 45, sell: 18 }
+      EMERALD: { buy: 120, sell: 48 }
+      DIAMOND: { buy: 300, sell: 120 }
+      ANCIENT_DEBRIS: { buy: -1, sell: 1200 }
+      NETHERITE_SCRAP: { buy: -1, sell: 1400 }
+      NETHERITE_INGOT: { buy: 5000, sell: 2000 }
+  farming:
+    name: '&eFarming'
+    icon: WHEAT
+    items:
+      WHEAT_SEEDS: { buy: 4, sell: 2 }
+      WHEAT: { buy: 6, sell: 3 }
+      CARROT: { buy: 8, sell: 3 }
+      POTATO: { buy: 8, sell: 3 }
+      SUGAR_CANE: { buy: 10, sell: 4 }
+      BAMBOO: { buy: 8, sell: 3 }
+      CACTUS: { buy: 12, sell: 4 }
+      MELON_SLICE: { buy: 4, sell: 1 }
+      PUMPKIN: { buy: 12, sell: 5 }
+      BREAD: { buy: 14, sell: 5 }
+      NETHER_WART: { buy: 30, sell: 12 }
+      HONEYCOMB: { buy: 30, sell: 12 }
+  drops:
+    name: '&dMob Drops'
+    icon: ROTTEN_FLESH
+    items:
+      STRING: { buy: 12, sell: 5 }
+      BONE: { buy: 10, sell: 4 }
+      ROTTEN_FLESH: { buy: 4, sell: 1 }
+      SPIDER_EYE: { buy: 16, sell: 6 }
+      GUNPOWDER: { buy: 40, sell: 16 }
+      SLIME_BALL: { buy: 60, sell: 24 }
+      ENDER_PEARL: { buy: 150, sell: 50 }
+      BLAZE_ROD: { buy: 200, sell: 70 }
+      GHAST_TEAR: { buy: -1, sell: 250 }
+      LEATHER: { buy: 25, sell: 10 }
+      FEATHER: { buy: 12, sell: 5 }
+      EGG: { buy: 10, sell: 4 }
+      INK_SAC: { buy: 14, sell: 5 }

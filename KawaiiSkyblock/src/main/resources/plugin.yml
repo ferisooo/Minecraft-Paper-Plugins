@@ -1,0 +1,28 @@
+name: KawaiiSkyblock
+version: ${project.version}
+main: com.ferisooo.kawaiiskyblock.KawaiiSkyblock
+api-version: '1.21'
+author: Ferris
+load: POSTWORLD
+
+commands:
+  island:
+    description: Skyblock island management.
+    aliases: [is, sb, skyblock]
+    usage: |
+      /island [menu|create|home|spawn|delete confirm]
+      /island trust <player> <role> | untrust <player> | members
+      /island flags | perms | pvp | generator [upgrade]
+      /island invite <player> | accept | kick/eject/promote/demote <player>
+      /island visit <player> | setvisit <public|invite|trust>
+      /island setwarp/delwarp/warp <name> | warps
+      /island top | level | value
+    permission: kawaiiskyblock.use
+
+permissions:
+  kawaiiskyblock.use:
+    description: Use skyblock islands.
+    default: true
+  kawaiiskyblock.admin:
+    description: Reload config and bypass island protection/flags.
+    default: op

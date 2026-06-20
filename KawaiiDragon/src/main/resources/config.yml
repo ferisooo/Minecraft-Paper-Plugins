@@ -1,0 +1,27 @@
+# ✿~ KawaiiDragon config ~✿
+#
+# The Ender Dragon remembers. Every defeat raises its TIER, and each tier gives
+# the next dragon more health and more damage. Tier 1 = the base (vanilla-ish)
+# dragon; after N defeats the next dragon is Tier N+1.
+
+# Master on/off.
+enabled: true
+
+# Announce in chat when a buffed dragon appears and when one is defeated.
+announce: true
+
+# Health: a tier-N dragon has (base-health + health-per-tier * N) HP, capped.
+# Vanilla dragon health is 200.
+base-health: 200
+health-per-tier: 40
+health-cap: 1500
+
+# Damage the dragon deals is multiplied by (1 + damage-per-tier * tier).
+# 0.15 = +15% damage per tier.
+damage-per-tier: 0.15
+
+# Bonus dropped XP per tier on defeat (0.5 = +50% per tier).
+bonus-xp-per-tier: 0.5
+
+# Tier stops climbing past this many defeats (keeps things sane).
+max-tier: 25

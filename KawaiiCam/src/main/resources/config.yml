@@ -1,0 +1,35 @@
+# ✿~ KawaiiCam config ~✿
+#
+# An autonomous cinematic camera. /cam follow <player> (ideally from a second
+# spectator account aimed at your main) or /cam solo flies an AI-directed
+# camera that picks its own shots. /cam record writes the camera track to a
+# JSON file under plugins/KawaiiCam/recordings/ ; /cam play <name> replays it
+# so you can screen-capture a clean run to MP4 with OBS / Replay Mod.
+
+# Default shot style. Affects camera distances, speeds and which shots the
+# director favours:
+#   chill  — slow, wide, gentle drifts
+#   action — close, fast, punchy
+#   epic   — balanced, sweeping (default)
+default-style: epic
+
+# Camera easing. 0..1 — how quickly the camera chases its target each tick.
+# Lower = floatier / more cinematic lag; higher = snappier. 0.15 is smooth.
+position-smoothing: 0.15
+rotation-smoothing: 0.2
+
+# Pull the camera in when terrain would block its view of the subject, so it
+# doesn't clip inside walls or hills.
+collision-avoidance: true
+
+# How long each shot holds before the director cuts to a new angle (seconds).
+shot-min-seconds: 4
+shot-max-seconds: 8
+
+# When a camera stops, teleport the operator back to where they started.
+# (Their gamemode is always restored regardless.)
+restore-on-stop: true
+
+# Safety cap on a single recording's length (seconds). When hit, the take is
+# auto-saved and recording stops (the camera keeps rolling).
+max-record-seconds: 120

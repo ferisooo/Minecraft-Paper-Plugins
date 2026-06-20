@@ -1,0 +1,22 @@
+name: KawaiiSparkles
+version: ${project.version}
+main: com.ferisooo.kawaiisparkles.KawaiiSparkles
+api-version: '1.21'
+author: Ferris
+description: Server-side visual flair - chest sparkles, footstep particles/sounds, animated action bar and an animated decorative menu.
+load: POSTWORLD
+
+commands:
+  ksparkles:
+    description: KawaiiSparkles controls (menu / hotbar / footsteps / chest / reload / info).
+    aliases: [ksparkle, sparkles, kspark]
+    usage: /ksparkles <menu|hotbar|footsteps|chest|reload|info>
+    permission: kawaiisparkles.use
+
+permissions:
+  kawaiisparkles.use:
+    description: Use KawaiiSparkles toggles and open the animated menu.
+    default: true
+  kawaiisparkles.admin:
+    description: Reload KawaiiSparkles and view its settings.
+    default: op

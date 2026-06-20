@@ -1,0 +1,22 @@
+name: KawaiiScoreboard
+version: ${project.version}
+main: com.ferisooo.kawaiiscoreboard.KawaiiScoreboard
+api-version: '1.21'
+author: Ferris
+description: Sidebar with online count, world, coords, per-world playtime, and edition.
+load: POSTWORLD
+
+commands:
+  kscoreboard:
+    description: Toggle the kawaii sidebar / reload its config.
+    aliases: [ksb, kawaiiscoreboard]
+    usage: /kscoreboard <on|off|toggle|reload>
+    permission: kawaiiscoreboard.use
+
+permissions:
+  kawaiiscoreboard.use:
+    description: Toggle your own sidebar.
+    default: true
+  kawaiiscoreboard.admin:
+    description: Reload KawaiiScoreboard config.
+    default: op

@@ -1,0 +1,23 @@
+name: KawaiiPoem
+version: 1.0.0
+main: com.ferisooo.kawaiipoem.KawaiiPoem
+api-version: '1.21'
+author: Ferris
+description: Plays a custom End-Poem-style scrolling credits message that you type into the config.
+
+commands:
+  kpoem:
+    description: Play the custom end poem on your screen.
+    usage: /kpoem [player] | /kpoem reload | /kpoem stop
+    permission: kawaiipoem.use
+
+permissions:
+  kawaiipoem.use:
+    description: Play the end poem for yourself.
+    default: true
+  kawaiipoem.others:
+    description: Play the end poem for another player.
+    default: op
+  kawaiipoem.admin:
+    description: Reload KawaiiPoem config.
+    default: op

@@ -1,0 +1,19 @@
+name: KawaiiNoGrief
+version: ${project.version}
+main: com.ferisooo.kawaiinogrief.KawaiiNoGrief
+api-version: '1.21'
+author: Ferris
+description: Explosions still damage entities + push them around, but blocks survive.
+load: POSTWORLD
+
+commands:
+  knogrief:
+    description: KawaiiNoGrief admin commands
+    aliases: [kng]
+    usage: /knogrief <on|off|toggle|status|reload>
+    permission: kawaiinogrief.admin
+
+permissions:
+  kawaiinogrief.admin:
+    description: Reload the KawaiiNoGrief config.
+    default: op

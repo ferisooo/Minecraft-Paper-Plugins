@@ -1,0 +1,21 @@
+name: KawaiiRecipes
+version: ${project.version}
+main: com.ferisooo.kawaiirecipes.KawaiiRecipes
+api-version: '1.21'
+author: Ferris
+description: Unlocks every recipe so the recipe book shows all craftable + non-craftable items.
+
+commands:
+  kawaiirecipes:
+    description: Unlock your recipes, reload, or unlock everyone.
+    aliases: [kr, recipes]
+    usage: /kr [reload|all]
+    permission: kawaiirecipes.use
+
+permissions:
+  kawaiirecipes.use:
+    description: Use /kr to unlock your own recipes.
+    default: true
+  kawaiirecipes.admin:
+    description: Use /kr reload and /kr all.
+    default: op

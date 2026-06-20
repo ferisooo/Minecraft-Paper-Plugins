@@ -1,0 +1,16 @@
+# Build output
+target/
+*.jar
+
+# Local IDE / OS
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# Minecraft world runtime / player data (keep templates free of personal data)
+playerdata/
+stats/
+advancements/
+session.lock
+*.lock

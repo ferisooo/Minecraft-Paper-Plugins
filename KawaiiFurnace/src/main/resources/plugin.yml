@@ -1,0 +1,19 @@
+name: KawaiiFurnace
+version: ${project.version}
+main: com.ferisooo.kawaiifurnace.KawaiiFurnace
+api-version: '1.21'
+author: Ferris
+description: Speeds up furnaces, blast furnaces and smokers, with optional fuel efficiency.
+load: POSTWORLD
+
+commands:
+  kfurnace:
+    description: KawaiiFurnace controls (reload / info).
+    aliases: [kfurnaces, furnacespeed]
+    usage: /kfurnace <reload|info>
+    permission: kawaiifurnace.admin
+
+permissions:
+  kawaiifurnace.admin:
+    description: Reload KawaiiFurnace and view its settings.
+    default: op

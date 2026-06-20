@@ -1,0 +1,19 @@
+name: KawaiiWorlds
+version: ${project.version}
+main: com.ferisooo.kawaiiworlds.KawaiiWorlds
+api-version: '1.21'
+author: Ferris
+description: Multi-world manager. Create, teleport, load, unload, delete worlds. Op-only.
+load: POSTWORLD
+
+commands:
+  kawaiiworlds:
+    description: Multi-world manager root command
+    aliases: [kw, mw]
+    usage: /kw help
+    permission: kawaiiworlds.admin
+
+permissions:
+  kawaiiworlds.admin:
+    description: Allows running every KawaiiWorlds command (create, tp, delete, etc.)
+    default: op

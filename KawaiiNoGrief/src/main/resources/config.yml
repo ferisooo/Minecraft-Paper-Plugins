@@ -1,0 +1,40 @@
+# ✿~ KawaiiNoGrief config ~✿
+#
+# This plugin keeps entity-damage and knockback from explosions intact
+# but clears the block list so terrain isn't broken.
+#
+# vanilla `mobGriefing` only governs mob-driven explosions (creeper,
+# ghast, enderman pickups). It doesn't cover TNT, end crystals, beds in
+# the nether, etc. — that's why your TNT was still punching holes even
+# after /gamerule mobGriefing false.
+
+# Master switch — false to bypass everything, vanilla behaviour returns.
+enabled: true
+
+# Default for sources NOT listed below. false = blocks won't break.
+default-block-damage: false
+
+# Per-source overrides. Key is the entity type (or block material for
+# block explosions) lower-cased. Set to true if you DO want vanilla
+# block damage from that specific source.
+#
+# Common keys:
+#   tnt, minecart_tnt, creeper, wither, wither_skull,
+#   fireball (ghast's large fireball), small_fireball,
+#   ender_crystal / end_crystal,
+#   breeze_wind_charge, wind_charge,
+#   bed (block), respawn_anchor (block)
+block-damage:
+  tnt: false
+  minecart_tnt: false
+  creeper: false
+  wither: false
+  wither_skull: false
+  fireball: false
+  small_fireball: false
+  ender_crystal: false
+  end_crystal: false
+  breeze_wind_charge: false
+  wind_charge: false
+  bed: false
+  respawn_anchor: false

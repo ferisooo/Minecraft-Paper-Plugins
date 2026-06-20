@@ -1,0 +1,26 @@
+name: KawaiiClaims
+version: 1.0.0
+main: com.ferisooo.kawaiiclaims.KawaiiClaims
+api-version: '1.21'
+author: Ferris
+description: Multi-chunk land claim and protection plugin. Claim connected chunks with a golden shovel, trust friends, toggle flags, and keep your builds safe.
+
+commands:
+  claim:
+    description: Manage your land claims.
+    aliases: [claims, kc, kclaims]
+    usage: /claim [claim|radius <n>|unclaim [all]|list|info|trust|untrust|flag|flags|preset <name>|show|perm|perms|tool|sethome|home|transfer|greeting|farewell|menu|bypass|admin]
+
+permissions:
+  kawaiiclaims.use:
+    description: Use claim commands and the golden shovel.
+    default: true
+  kawaiiclaims.radius:
+    description: Use /claim radius to claim a square of chunks at once.
+    default: true
+  kawaiiclaims.admin:
+    description: Bypass all protection, force-delete claims, grant bonus chunks, view admin lists, unlimited chunks.
+    default: op
+  kawaiiclaims.exempt:
+    description: Claims owned by this player are exempt from expiration.
+    default: op

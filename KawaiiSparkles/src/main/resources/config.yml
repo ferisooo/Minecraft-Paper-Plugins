@@ -1,0 +1,199 @@
+# KawaiiSparkles ~ purely cosmetic, server-side visual flair.
+# Everything here works WITHOUT a resource pack and is Geyser/Bedrock-safe.
+
+# ---------------------------------------------------------------------------
+# Sparkles + sound when a chest / ender chest / barrel / shulker box is opened.
+# (The lid-open animation is vanilla; we add particles and a custom chime.)
+# ---------------------------------------------------------------------------
+chest-effects:
+  enabled: true
+  # Particle spawned in a little ring above the opened block.
+  particle: HEART
+  count: 10
+  # Vertical height (blocks) above the chest where particles appear.
+  height: 1.1
+  # Radius of the particle ring.
+  radius: 0.45
+  open-sound: BLOCK_NOTE_BLOCK_BELL
+  open-pitch: 1.6
+  close-sound: BLOCK_NOTE_BLOCK_HAT
+  close-pitch: 1.2
+
+# ---------------------------------------------------------------------------
+# Footstep particles + sound as players walk / sprint.
+# Throttled so it never spams; sprinting gets a bigger, different effect.
+# ---------------------------------------------------------------------------
+movement-effects:
+  enabled: true
+  # Minimum ticks between footstep effects for one player (20 ticks = 1s).
+  walk-interval-ticks: 6
+  sprint-interval-ticks: 3
+  walk-particle: COMPOSTER          # tiny green flecks; subtle
+  walk-count: 3
+  sprint-particle: CLOUD            # bigger puff when sprinting
+  sprint-count: 6
+  # Soft step blip. Set to "" to disable the sound and keep only particles.
+  walk-sound: BLOCK_WOOL_STEP
+  walk-volume: 0.25
+  sprint-sound: BLOCK_WOOL_STEP
+  sprint-volume: 0.5
+  # Don't play effects while sneaking (tip-toeing should be quiet).
+  skip-while-sneaking: true
+
+# ---------------------------------------------------------------------------
+# Selectable footstep trails. Each player picks one from the control panel
+# (the "Trail" button) or with /ksparkles trail. Add/remove entries freely —
+# the picker GUI sizes itself to fit. If walk-/sprint-particle are omitted they
+# fall back to movement-effects above; counts fall back to walk-/sprint-count.
+#
+#   icon            : the item shown in the picker (any item material)
+#   walk-particle   : particle while walking
+#   sprint-particle : particle while sprinting
+#   walk-count      : particles per walking step
+#   sprint-count    : particles per sprinting step
+# ---------------------------------------------------------------------------
+trails:
+  default: hearts          # which trail new players start with (must be a key below)
+  options:
+    hearts:
+      name: "&dHearts"
+      icon: POPPY
+      walk-particle: HEART
+      sprint-particle: HEART
+      walk-count: 2
+      sprint-count: 5
+    clouds:
+      name: "&fClouds"
+      icon: WHITE_WOOL
+      walk-particle: CLOUD
+      sprint-particle: CLOUD
+      walk-count: 2
+      sprint-count: 6
+    flames:
+      name: "&6Flames"
+      icon: BLAZE_POWDER
+      walk-particle: FLAME
+      sprint-particle: FLAME
+      walk-count: 3
+      sprint-count: 8
+    notes:
+      name: "&bMusic Notes"
+      icon: NOTE_BLOCK
+      walk-particle: NOTE
+      sprint-particle: NOTE
+      walk-count: 1
+      sprint-count: 3
+    snow:
+      name: "&fSnowflakes"
+      icon: SNOWBALL
+      walk-particle: SNOWFLAKE
+      sprint-particle: SNOWFLAKE
+      walk-count: 3
+      sprint-count: 7
+    souls:
+      name: "&3Souls"
+      icon: SOUL_SAND
+      walk-particle: SOUL
+      sprint-particle: SOUL
+      walk-count: 2
+      sprint-count: 5
+    enderportal:
+      name: "&5Ender"
+      icon: ENDER_PEARL
+      walk-particle: PORTAL
+      sprint-particle: PORTAL
+      walk-count: 4
+      sprint-count: 10
+    sparkle:
+      name: "&eStardust"
+      icon: END_ROD
+      walk-particle: END_ROD
+      sprint-particle: END_ROD
+      walk-count: 2
+      sprint-count: 6
+
+# ---------------------------------------------------------------------------
+# Per-action effects. Besides the footstep trail above, each player can choose
+# a DIFFERENT effect for attacking, mining, jumping, crouching and swimming,
+# from the Effects menu (control panel) or /ksparkles effects.
+#
+# Each action has:  enabled, default (an option key), and options.
+# Each option:  name, icon (any item), particle, count.
+# A built-in "None" choice is always added so players can switch an effect off.
+# If you delete an action here, sensible built-in defaults are used instead.
+# ---------------------------------------------------------------------------
+effects:
+  attack:
+    enabled: true
+    default: crit
+    options:
+      crit:   { name: "&cCrit",    icon: IRON_SWORD,      particle: CRIT,          count: 12 }
+      sparks: { name: "&eSparks",  icon: GLOWSTONE_DUST,  particle: ENCHANTED_HIT, count: 14 }
+      flames: { name: "&6Flames",  icon: BLAZE_POWDER,    particle: FLAME,         count: 12 }
+      hearts: { name: "&dHearts",  icon: POPPY,           particle: HEART,         count: 6 }
+  mining:
+    enabled: true
+    default: sparks
+    options:
+      sparks: { name: "&fSparks",  icon: IRON_PICKAXE,    particle: CRIT,          count: 8 }
+      poof:   { name: "&7Poof",    icon: WHITE_WOOL,      particle: CLOUD,         count: 10 }
+      notes:  { name: "&bNotes",   icon: NOTE_BLOCK,      particle: NOTE,          count: 5 }
+      flame:  { name: "&6Flame",   icon: BLAZE_POWDER,    particle: FLAME,         count: 8 }
+  jump:
+    enabled: true
+    default: poof
+    options:
+      poof:     { name: "&fPoof",     icon: FEATHER,         particle: CLOUD,          count: 12 }
+      happy:    { name: "&aHappy",    icon: EMERALD,         particle: HAPPY_VILLAGER, count: 8 }
+      firework: { name: "&eFirework", icon: FIREWORK_ROCKET, particle: FIREWORK,       count: 10 }
+      hearts:   { name: "&dHearts",   icon: POPPY,           particle: HEART,          count: 6 }
+  sneak:
+    enabled: true
+    default: smoke
+    options:
+      smoke:  { name: "&8Smoke",   icon: COAL,            particle: SMOKE,         count: 6 }
+      portal: { name: "&5Portal",  icon: ENDER_PEARL,     particle: PORTAL,        count: 10 }
+      soul:   { name: "&3Soul",    icon: SOUL_SAND,       particle: SOUL,          count: 6 }
+  swim:
+    enabled: true
+    default: bubbles
+    options:
+      bubbles: { name: "&bBubbles", icon: PRISMARINE_SHARD, particle: BUBBLE,         count: 8 }
+      splash:  { name: "&3Splash",  icon: WATER_BUCKET,     particle: SPLASH,         count: 8 }
+      drip:    { name: "&9Drip",    icon: BLUE_DYE,         particle: DRIPPING_WATER, count: 4 }
+
+# ---------------------------------------------------------------------------
+# "Animated hotbar" == an animated action bar above the hotbar.
+# The real 9 hotbar slots can't be repainted without a resource pack, so this
+# is the closest server-side equivalent. Opt-in per player via /ksparkles hotbar.
+# ---------------------------------------------------------------------------
+hotbar:
+  enabled: true
+  # Ticks between frames.
+  interval-ticks: 8
+  # Frames are shown in order then loop. Supports & color codes.
+  frames:
+    - "&d&l. * &f&l. &d&l* &f&l. * &d&l."
+    - "&5&l* &d&l. * &f&l. &d&l* &f&l."
+    - "&f&l. &5&l* &d&l. * &f&l. &d&l*"
+    - "&d&l* &f&l. &5&l* &d&l. * &f&l."
+
+# ---------------------------------------------------------------------------
+# The control panel, opened with /ksparkles (or /ksparkles menu).
+# It's a clickable GUI: the border tiles flow through a colour palette (a genuine
+# server-side "animated inventory") and the middle row holds toggle buttons for
+# footsteps, the action bar, etc. Works on Bedrock through Geyser; fancy glyphs
+# are auto-swapped to ASCII for Bedrock viewers so nothing shows as tofu boxes.
+# ---------------------------------------------------------------------------
+menu:
+  enabled: true
+  title: "&d&l✿ KawaiiSparkles ✿"
+  rows: 3                  # 3..6 (needs an interior row for the buttons)
+  interval-ticks: 6        # ticks between border frames (higher = gentler; nicer on Bedrock)
+  # Stained-glass-pane colours cycled around the border, in order.
+  palette: [PINK, MAGENTA, PURPLE, LIGHT_BLUE, WHITE]
+
+# Whether features are ON by default for players who never toggled them.
+defaults:
+  footsteps-on: true
+  hotbar-on: false         # action bar is opt-in so it never surprises anyone

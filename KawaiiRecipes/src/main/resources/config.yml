@@ -1,0 +1,30 @@
+# ✿~ KawaiiRecipes config ~✿
+#
+# Keeps the recipe book (E-menu + crafting table panel) fully stocked by
+# unlocking every recipe for players. Fixes "I have the items for a blast
+# furnace but it won't show up / I have to craft it manually".
+
+# Master on/off.
+enabled: true
+
+# Unlock all recipes automatically when a player joins.
+unlock-on-join: true
+
+# Ticks to wait after join before unlocking (20 = 1 second). A short delay
+# makes sure the client is fully loaded so the recipe book updates cleanly.
+join-delay-ticks: 20
+
+# Send a little message when recipes get unlocked on join.
+announce: true
+
+# The message ('&' color codes). Only sent if at least one NEW recipe was
+# unlocked, so returning players who already have everything stay quiet.
+announce-message: "&d(✧) recipe book topped up~ everything you can make now shows up! &c♡"
+
+# Play a little flourish (a "✨ Recipes Unlocked ✨" title, note particles and a
+# chime) when new recipes unlock. Like the message, only fires when something
+# new was actually unlocked. Set false to keep it to the chat message only.
+celebrate: true
+
+# Tip: players can also run /kr any time to re-unlock their own recipes,
+# and an admin can run /kr all to unlock for everyone online.

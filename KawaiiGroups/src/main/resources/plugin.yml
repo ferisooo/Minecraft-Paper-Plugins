@@ -1,0 +1,28 @@
+name: KawaiiGroups
+version: ${project.version}
+main: com.ferisooo.kawaiigroups.KawaiiGroups
+api-version: '1.21'
+author: Ferris
+description: Online-only player groups with roles, invites, GUIs, group chat and shared (multiplied) hearts.
+load: POSTWORLD
+softdepend: [FiveHearts]
+
+commands:
+  group:
+    description: Group system - create, invite, manage, and open the groups menu.
+    aliases: [groups, grp]
+    usage: /group <create|invite|accept|deny|leave|disband|kick|promote|demote|owner|members|announce|chat|color|tp|tpaccept|tpdeny>
+    permission: kawaiigroups.use
+  gc:
+    description: Send a message to your group only.
+    aliases: [gchat]
+    usage: /gc <message>
+    permission: kawaiigroups.use
+
+permissions:
+  kawaiigroups.use:
+    description: Use the groups system.
+    default: true
+  kawaiigroups.admin:
+    description: Reload KawaiiGroups.
+    default: op

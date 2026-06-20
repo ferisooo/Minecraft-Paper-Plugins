@@ -1,0 +1,33 @@
+name: KawaiiDungeons
+version: ${project.version}
+main: com.ferisooo.kawaiidungeons.KawaiiDungeons
+api-version: '1.21'
+author: Ferris
+load: POSTWORLD
+
+commands:
+  dungeon:
+    description: Instanced party dungeons.
+    aliases: [dg]
+    usage: |
+      /dungeon list | info <id>
+      /dungeon start <id> <normal|hard|nightmare|mythic> [--speedrun] [--deathless] [--hardcore]
+      /dungeon leave | menu
+      /dungeon tokens | weekly | rep | leaderboard <id> <difficulty>
+      /dungeon reload (admin)
+    permission: kawaiidungeons.use
+  party:
+    description: Party management for dungeons.
+    aliases: [p]
+    usage: |
+      /party create | invite <player> | accept | leave | kick <player>
+      /party disband | list | tp
+    permission: kawaiidungeons.use
+
+permissions:
+  kawaiidungeons.use:
+    description: Use parties and dungeons.
+    default: true
+  kawaiidungeons.admin:
+    description: Reload config.
+    default: op

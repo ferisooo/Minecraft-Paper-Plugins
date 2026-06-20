@@ -1,0 +1,31 @@
+name: KawaiiShop
+version: ${project.version}
+main: com.ferisooo.kawaiishop.KawaiiShop
+api-version: '1.21'
+author: Ferris
+description: A skyblock-only buy/sell shop GUI with a coin economy, priced by rarity.
+load: POSTWORLD
+
+commands:
+  kshop:
+    description: Open the skyblock shop (only works on your island).
+    aliases: [shop, islandshop]
+    usage: /kshop
+    permission: kawaiishop.use
+  balance:
+    description: Check how many coins you have.
+    aliases: [bal, coins, money]
+    usage: /balance
+    permission: kawaiishop.use
+  kshopadmin:
+    description: KawaiiShop admin (give/take/set coins, reload).
+    usage: /kshopadmin <give|take|set|reload> [player] [amount]
+    permission: kawaiishop.admin
+
+permissions:
+  kawaiishop.use:
+    description: Use the shop and check your balance.
+    default: true
+  kawaiishop.admin:
+    description: Manage balances, reload config, bypass skyblock item bans.
+    default: op

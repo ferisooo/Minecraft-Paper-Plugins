@@ -1,0 +1,54 @@
+# KawaiiDungeons — named loot tables.
+# Each entry: { item, min, max, weight, rarity, boss-exclusive }
+#   item          : a Bukkit Material name (must match the running server).
+#   min/max       : stack size range.
+#   weight        : relative weight for the weighted roll.
+#   rarity        : common | rare | epic | legendary | mythic (colours the name).
+#   boss-exclusive: if true, only dropped from boss-kill rolls.
+
+loot-tables:
+  crypt_loot:
+    rolls: 3
+    entries:
+      - item: GOLD_INGOT
+        min: 2
+        max: 6
+        weight: 40
+        rarity: common
+      - item: IRON_INGOT
+        min: 3
+        max: 8
+        weight: 40
+        rarity: common
+      - item: DIAMOND
+        min: 1
+        max: 3
+        weight: 20
+        rarity: rare
+      - item: EMERALD
+        min: 1
+        max: 4
+        weight: 18
+        rarity: rare
+      - item: ENCHANTED_GOLDEN_APPLE
+        min: 1
+        max: 1
+        weight: 5
+        rarity: epic
+      - item: NETHERITE_INGOT
+        min: 1
+        max: 1
+        weight: 2
+        rarity: legendary
+      - item: NETHER_STAR
+        min: 1
+        max: 1
+        weight: 1
+        rarity: mythic
+        boss-exclusive: true
+      - item: DRAGON_HEAD
+        min: 1
+        max: 1
+        weight: 1
+        rarity: mythic
+        boss-exclusive: true

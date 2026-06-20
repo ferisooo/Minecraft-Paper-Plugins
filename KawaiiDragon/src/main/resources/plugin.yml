@@ -1,0 +1,21 @@
+name: KawaiiDragon
+version: ${project.version}
+main: com.ferisooo.kawaiidragon.KawaiiDragon
+api-version: '1.21'
+author: Ferris
+description: The Ender Dragon grows stronger (more health & damage) every time it is defeated.
+
+commands:
+  dragon:
+    description: Show / set the dragon defeat count.
+    aliases: [kdragon, enderdragon]
+    usage: /dragon [reload|setdefeats <n>]
+    permission: kawaiidragon.use
+
+permissions:
+  kawaiidragon.use:
+    description: View the dragon tier.
+    default: true
+  kawaiidragon.admin:
+    description: Set defeats / reload config.
+    default: op

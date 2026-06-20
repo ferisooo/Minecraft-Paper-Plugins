@@ -1,0 +1,16 @@
+name: KawaiiMobChat
+version: ${project.version}
+api-version: '1.21'
+main: com.ferisooo.kawaiimobchat.KawaiiMobChat
+author: Ferris
+description: Mobs respond to player chat using the DeepSeek API. Insult them and they fight back!
+load: POSTWORLD
+commands:
+  kmcreload:
+    description: Reload KawaiiMobChat config
+    usage: /kmcreload
+    permission: kawaiimobchat.admin
+permissions:
+  kawaiimobchat.admin:
+    description: Admin permission for KawaiiMobChat
+    default: op

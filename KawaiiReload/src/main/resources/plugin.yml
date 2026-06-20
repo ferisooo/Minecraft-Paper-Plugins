@@ -1,0 +1,19 @@
+name: KawaiiReload
+version: ${project.version}
+main: com.ferisooo.kawaiireload.KawaiiReload
+api-version: '1.21'
+author: Ferris
+description: Reload plugins or restart the server without leaving the game.
+load: STARTUP
+
+commands:
+  kreload:
+    description: Reload plugins / server data / restart the server
+    aliases: [kr, kawaiireload]
+    usage: /kreload <plugin|all|server|data|config|list|help>
+    permission: kawaiireload.use
+
+permissions:
+  kawaiireload.use:
+    description: Use the /kreload command.
+    default: op

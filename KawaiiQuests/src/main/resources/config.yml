@@ -1,0 +1,179 @@
+# ✿~ KawaiiQuests config ~✿
+#
+# Players open /kquest, pick Easy / Medium / Hard, and an AI (DeepSeek) writes
+# them a quest. Finish the objective and a loot crate spins up a reward — the
+# harder the quest, the better the loot. Works for Bedrock players too: the
+# menu is a normal chest GUI, which Geyser translates automatically.
+
+# ===== DeepSeek (the AI that writes the quests) =====
+# Quests are AI-ONLY. A valid DeepSeek key is REQUIRED — without it (or if a
+# request fails) /kquest shows an error and gives no quest. There are no
+# built-in fallback quests.
+deepseek:
+  # Your DeepSeek API key. Get one at https://platform.deepseek.com/ .
+  api-key: "PUT-YOUR-KEY-HERE"
+
+  # OpenAI-compatible chat-completions endpoint + model.
+  # The model is always instructed to think step-by-step before answering.
+  #   deepseek-chat     = fast (default)
+  #   deepseek-reasoner = full chain-of-thought "thinking" (slower, pricier).
+  api-url: "https://api.deepseek.com/chat/completions"
+  model: "deepseek-chat"
+
+  # Sampling temperature (higher = more varied quests).
+  temperature: 1.1
+
+  # How long to wait for the AI before giving up (seconds).
+  timeout-seconds: 20
+
+# ===== Difficulty tuning =====
+# min/max clamp the objective amount the AI is allowed to ask for, per tier.
+difficulty:
+  easy:
+    min-amount: 4
+    max-amount: 10
+  medium:
+    min-amount: 8
+    max-amount: 18
+  hard:
+    min-amount: 5
+    max-amount: 14
+  brutal:
+    min-amount: 3
+    max-amount: 16
+
+# Seconds a player must wait after finishing a quest before taking another.
+# Set 0 to disable.
+cooldown-seconds: 0
+
+# Broadcast to the WHOLE server (with a fanfare sound) when someone finishes a
+# Hard or Brutal quest. Set false to keep completions quiet.
+announce-hard-completions: true
+
+# Minimum seconds between quest REQUESTS, per player. This caps how often the
+# AI/API is hit even if a player spams pick -> abandon -> pick. Protects your
+# DeepSeek bill. Set 0 to disable (not recommended if you use a real API key).
+request-cooldown-seconds: 10
+
+# ===== Abandon penalty =====
+# Abandoning a quest puts you on a timeout before you can take another. The base
+# timeout scales with the quest's difficulty, and it STACKS: each abandon while
+# the stack is active multiplies the base by the stack count (capped). The stack
+# resets if you go 'stack-reset-seconds' without abandoning.
+abandon-penalty:
+  enabled: true
+  easy-seconds: 5
+  medium-seconds: 15
+  hard-seconds: 30
+  brutal-seconds: 60
+  # Hard cap on the (base x stack) timeout, in seconds.
+  max-seconds: 300
+  # Go this long without abandoning and the stack count resets to 0.
+  stack-reset-seconds: 300
+
+# ===== Anti-exploit (stops farming quest progress for free loot) =====
+anti-exploit:
+  # Don't count breaking blocks a player placed (stops place-and-break farming).
+  # Also marks the items those blocks drop as non-counting for COLLECT.
+  track-placed-blocks: true
+  # Cap on how many placed-block positions to remember (memory safety).
+  max-tracked-blocks: 50000
+  # Don't count picking up items a player manually dropped (stops drop/re-pickup
+  # farming and item-passing between players) for COLLECT quests.
+  ignore-player-dropped: true
+  # Don't count KILL progress for mobs spawned these ways (anti spawn-egg / cheat
+  # farming). Values are Bukkit CreatureSpawnEvent.SpawnReason names.
+  ignore-kill-spawn-reasons:
+    - SPAWNER_EGG
+    - DISPENSE_EGG
+    - COMMAND
+    - CUSTOM
+
+# Targets the AI is never allowed to use (impossible, creative-only, or bosses
+# you can't realistically do N of). Bukkit Material or EntityType names.
+blocked-targets:
+  - AIR
+  - BEDROCK
+  - BARRIER
+  - COMMAND_BLOCK
+  - CHAIN_COMMAND_BLOCK
+  - REPEATING_COMMAND_BLOCK
+  - STRUCTURE_BLOCK
+  - STRUCTURE_VOID
+  - JIGSAW
+  - END_PORTAL_FRAME
+  - SPAWNER
+  - ENDER_DRAGON
+  - WITHER
+
+# ===== Visual effects =====
+# Particle bursts on quest completion and crate reveals (hearts, fireworks,
+# totem sparkles). Titles and sounds always play; this only gates particles.
+# Set false on performance-sensitive servers.
+effects: true
+
+# ===== Crate animation =====
+# Used both when you PICK a quest (the reel spins while the quest is written,
+# then reveals it and opens the menu) and when you FINISH one (the loot reel).
+crate:
+  # Minimum animation length (number of reel steps). Higher = longer spin.
+  spin-steps: 22
+
+# ===== Loot tables =====
+# Weighted random rewards per difficulty. weight = relative chance (bigger =
+# more common). Harder tiers list better items. 'material' is any Bukkit
+# Material; 'amount' is how many you get.
+loot:
+  easy:
+    - { material: BREAD,         amount: 6,  weight: 30 }
+    - { material: COOKED_BEEF,   amount: 4,  weight: 25 }
+    - { material: IRON_INGOT,    amount: 3,  weight: 15 }
+    - { material: COAL,          amount: 8,  weight: 20 }
+    - { material: EXPERIENCE_BOTTLE, amount: 4, weight: 12 }
+    - { material: GOLD_INGOT,    amount: 2,  weight: 8 }
+  medium:
+    - { material: IRON_INGOT,    amount: 6,  weight: 25 }
+    - { material: GOLD_INGOT,    amount: 5,  weight: 20 }
+    - { material: EXPERIENCE_BOTTLE, amount: 8, weight: 18 }
+    - { material: DIAMOND,       amount: 2,  weight: 10 }
+    - { material: ENDER_PEARL,   amount: 4,  weight: 12 }
+    - { material: GOLDEN_APPLE,  amount: 2,  weight: 8 }
+    - { material: EMERALD,       amount: 4,  weight: 10 }
+  hard:
+    - { material: DIAMOND,       amount: 5,  weight: 22 }
+    - { material: GOLDEN_APPLE,  amount: 4,  weight: 16 }
+    - { material: ENCHANTED_GOLDEN_APPLE, amount: 1, weight: 6 }
+    - { material: NETHERITE_SCRAP, amount: 2, weight: 8 }
+    - { material: NETHERITE_INGOT, amount: 1, weight: 3 }
+    - { material: DIAMOND_BLOCK,  amount: 1, weight: 6 }
+    - { material: EXPERIENCE_BOTTLE, amount: 16, weight: 18 }
+    - { material: TOTEM_OF_UNDYING, amount: 1, weight: 4 }
+  # Brutal tier. NOTE: the AI normally picks the reward itself; this table is the
+  # fallback used only if the AI's choice is missing or invalid.
+  brutal:
+    - { material: NETHERITE_SCRAP,  amount: 4,  weight: 18 }
+    - { material: DIAMOND_BLOCK,    amount: 3,  weight: 16 }
+    - { material: EXPERIENCE_BOTTLE, amount: 32, weight: 16 }
+    - { material: ENCHANTED_GOLDEN_APPLE, amount: 2, weight: 12 }
+    - { material: TOTEM_OF_UNDYING, amount: 2,  weight: 10 }
+    - { material: NETHERITE_INGOT,  amount: 2,  weight: 8 }
+    - { material: NETHERITE_BLOCK,  amount: 1,  weight: 4 }
+    - { material: BEACON,           amount: 1,  weight: 3 }
+
+# ===== Messages ('&' color codes) =====
+messages:
+  prefix: "&d(✧) "
+  thinking: "&7summoning a &dquest&7 just for you... ✿"
+  assigned: "&dNew quest~ &f%title%"
+  progress: "&d%title% &7[&f%progress%&7/&f%amount%&7]"
+  completed: "&a✓ Quest complete! &dopening your loot crate~ ✿"
+  big-complete: "&6✦ &e%player% &6just beat a %difficulty% &6quest: &f%title%&6! ✦"
+  reward: "&dYou won &f%amount%x %item%&d! &c♡"
+  abandoned: "&7Quest abandoned. Take a new one with &f/kquest"
+  abandon-penalty: "&cYou bailed~ &7no new quest for &f%seconds%s &8(penalty x%stack%)"
+  abandon-cooldown: "&7Still on your abandon timeout~ &f%seconds%s &7left"
+  cooldown: "&7You're resting~ try again in &f%seconds%s"
+  already-active: "&7You already have a quest! Finish it first. ✿"
+  busy: "&7Hang on~ your quest is still being written..."
+  ai-failed: "&c(✧) the quest-writer (DeepSeek) is unavailable right now — try again later~"
+  no-permission: "&c(✧) you don't have permission for that ~"
