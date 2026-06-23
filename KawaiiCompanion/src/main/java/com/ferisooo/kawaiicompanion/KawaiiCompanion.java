@@ -3027,7 +3027,20 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
             // Validate destination — water is passable, but we still
             // don't want to step into a solid block (e.g., diving
             // toward a target whose path passes through stone).
-            if (isBlocked(next)) return true;
+            if (isBlocked(next)) {
+                // Surface-swim special case: she's bobbing against a bank
+                // one block above her foot (the classic "stuck in the water
+                // at the edge of a cliff" bug). The 3D swim step rams the
+                // wall and never rises the last block to climb out, so the
+                // straight-step is blocked, she's flagged stuck, repaths up
+                // the same bank, and rams it again — forever. Try to hop out
+                // onto the ledge top, mirroring a vanilla player's auto-jump
+                // out of water. Ladder/vine climbers have their own top-out
+                // handling below, so this is gated to genuine swimming.
+                Location exit = swimming ? waterExitStep(standLoc, w, delta) : null;
+                if (exit == null) return true;
+                next = exit;
+            }
             // Climb-specific: when the next cell is no longer a climbable
             // column (she's about to top out), STILL accept the step —
             // the next tick will use the land path naturally. The
@@ -3108,6 +3121,49 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
         c.entity.smoothMoveTo(next);
 
         return true;
+    }
+
+    /**
+     * Climb out of the water onto a one-block-high bank in the direction
+     * of travel. Fixes the "companion gets stuck in the water at the edge
+     * of a cliff" bug: a surface swimmer whose route continues onto land
+     * keeps stepping horizontally into the bank wall (which is solid at her
+     * foot level) and never rises the final block to stand on top of it.
+     *
+     * <p>Returns the ledge-top stand {@link Location} to hop onto, or
+     * {@code null} when there's no clean single-block ledge to climb —
+     * in which case the caller leaves her swimming. Guards keep this from
+     * firing while diving (an underwater wall has water, not air, above it,
+     * so the clearance check rejects it) or when the move is purely
+     * vertical (no bank to climb toward).
+     *
+     * @param standLoc her current position (foot block).
+     * @param w        the world.
+     * @param delta    full 3D vector toward the target.
+     */
+    private Location waterExitStep(Location standLoc, World w, Vector delta) {
+        double horiz = Math.hypot(delta.getX(), delta.getZ());
+        if (horiz < 1e-4) return null; // straight up/down — no bank to climb onto
+
+        // The bank column one short step ahead in the travel direction.
+        int ax = (int) Math.floor(standLoc.getX() + delta.getX() / horiz * 0.6);
+        int az = (int) Math.floor(standLoc.getZ() + delta.getZ() / horiz * 0.6);
+        int footY = standLoc.getBlockY();
+
+        // It's only a climbable bank if the block at her foot level ahead is
+        // solid (the wall she's stuck against)...
+        if (w.getBlockAt(ax, footY, az).isPassable()) return null;
+        // ...with TWO dry, passable cells above it for her 2-tall body to
+        // stand in. Requiring non-water here is what keeps a submerged wall
+        // (water above it) from being mistaken for a shoreline ledge.
+        Block stand = w.getBlockAt(ax, footY + 1, az);
+        Block headroom = w.getBlockAt(ax, footY + 2, az);
+        if (!stand.isPassable() || stand.getType() == Material.WATER) return null;
+        if (!headroom.isPassable() || headroom.getType() == Material.WATER) return null;
+
+        // Hop up onto the ledge top, keeping her facing yaw/pitch for the tick.
+        return new Location(w, ax + 0.5, footY + 1, az + 0.5,
+                standLoc.getYaw(), standLoc.getPitch());
     }
 
     /**
