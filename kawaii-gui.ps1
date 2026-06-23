@@ -13,7 +13,7 @@ if (-not $Root) { $Root = (Get-Location).Path }
 # If this folder was downloaded as a ZIP (folder name ends in "-main", no .git),
 # the manager can convert it into a real git repo so pull/refresh work.
 # *** Set this to YOUR repo URL if the guess below is wrong. ***
-$Script:RepoUrl = 'https://github.com/ferisooo/minecraft-plugins.git'
+$Script:RepoUrl = 'https://github.com/ferisooo/Minecraft-Paper-Plugins.git'
 
 # Auto-discover plugins by scanning $Root for direct subfolders that contain a
 # pom.xml. That way 'git pull' adding a new plugin shows up after a click of
