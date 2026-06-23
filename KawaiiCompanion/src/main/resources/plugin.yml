@@ -19,7 +19,7 @@ commands:
       /kc skin <skinFileName> -- swap to a skin from the skins/ folder
       /kc skins               -- open the appearances (skins/forms) menu
       /kc form <mob|human>    -- morph into any mob (fights hostiles in its style)
-      /kc info                -- show level, xp and unlocked abilities
+      /kc info                -- show her status (name, heal aura, form)
       /kc mount               -- ride your companion (real-entity only)
       /kc reset               -- wipe your conversation memory
       /kc build               -- open the schematic build menu

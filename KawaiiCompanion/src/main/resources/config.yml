@@ -162,46 +162,19 @@ form-combat:
   # Seconds between attacks. Style multipliers apply on top (warden
   # sonic boom is much slower, llama spit faster, etc).
   attack-period-seconds: 2
-  # Damage per hit in hearts, plus a bonus per companion level.
+  # Damage per hit in hearts.
   damage-hearts: 2.0
-  damage-per-level-hearts: 0.25
 
-# ===== Leveling & abilities (FEATURE 2) =======================
+# ===== Heal aura =============================================
 #
-# Your companion gains XP and levels up over time and from combat.
-# Level + xp persist per owner. On level-up she announces with a
-# title + sound and her abilities scale / unlock.
-#
-# XP sources:
-#   • passive-xp-amount every passive-xp-period-seconds while summoned
-#   • xp-per-kill when YOU kill a mob within xp-kill-radius of her
-#
-# XP to go from level N to N+1 = xp-base + xp-per-level * (N-1).
-#
-# Abilities (each individually toggleable):
-#   • movement-speed: she follows / pathfinds faster at higher levels
-#   • heal-aura: from heal-aura-unlock-level on, she periodically tops
-#     up your HP when you're hurt and nearby (heart particles + chime)
-#   • combat-assist: she re-targets mobs that hit you (existing GUARD
-#     assist behavior; mobs can never target the real-entity companion)
-leveling:
+# While summoned, your companion periodically tops up your HP when
+# you're hurt and standing nearby — with heart particles and a soft
+# chime. Toggle it off if you'd rather she didn't heal you.
+heal-aura:
   enabled: true
-  # 0 = unlimited / indefinite leveling (default). Set a positive number to cap.
-  max-level: 0
-  xp-base: 30
-  xp-per-level: 20
-  xp-per-kill: 5
-  xp-kill-radius: 24.0
-  passive-xp-amount: 1
-  passive-xp-period-seconds: 30
-  abilities:
-    movement-speed: true
-    heal-aura: true
-    combat-assist: true
-    heal-aura-unlock-level: 3
-    heal-aura-period-seconds: 4
-    heal-aura-hearts: 1.0
-    heal-aura-range: 8.0
+  period-seconds: 4
+  hearts: 1.0
+  range: 8.0
 
 # ===== Mount mode (FEATURE 4) =================================
 #
