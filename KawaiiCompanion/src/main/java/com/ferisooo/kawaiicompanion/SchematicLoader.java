@@ -775,6 +775,30 @@ public final class SchematicLoader {
         return out;
     }
 
+    /**
+     * Hard cap on the byte footprint of any single NBT array/list. Guards
+     * against a corrupt or hostile {@code .schem} that declares a huge length
+     * field (e.g. {@code 0x7FFFFFFF}): without this, {@code new byte[len]} /
+     * {@code new int[len]} would try to grab multiple gigabytes and OOM the
+     * server the instant the file is opened — before any data is even read.
+     * 64 MB comfortably fits any sane schematic while making a malicious
+     * length fail fast as a normal "bad file" load error.
+     */
+    private static final int MAX_NBT_BYTES = 64 * 1024 * 1024;
+
+    /**
+     * Validate a length read from the file before it's used to size an
+     * allocation. Rejects negatives and anything whose {@code len ×
+     * bytesPerElem} exceeds {@link #MAX_NBT_BYTES}. Computed in {@code long}
+     * so the multiply can't overflow back into a small positive int.
+     */
+    private static int checkedLen(int len, int bytesPerElem) throws IOException {
+        if (len < 0 || (long) len * bytesPerElem > MAX_NBT_BYTES) {
+            throw new IOException("NBT array length out of bounds: " + len);
+        }
+        return len;
+    }
+
     private static Object readPayload(DataInputStream in, int type) throws IOException {
         switch (type) {
             case 1:  return in.readByte();
@@ -784,7 +808,7 @@ public final class SchematicLoader {
             case 5:  return in.readFloat();
             case 6:  return in.readDouble();
             case 7: {
-                int len = in.readInt();
+                int len = checkedLen(in.readInt(), 1);
                 byte[] b = new byte[len];
                 in.readFully(b);
                 return b;
@@ -792,7 +816,7 @@ public final class SchematicLoader {
             case 8:  return readUtf(in);
             case 9: { // List
                 int itemType = in.readUnsignedByte();
-                int len = in.readInt();
+                int len = checkedLen(in.readInt(), 8); // 8 = worst-case object reference
                 List<Object> list = new ArrayList<>(Math.max(0, len));
                 for (int i = 0; i < len; i++) {
                     list.add(itemType == 0 ? null : readPayload(in, itemType));
@@ -801,13 +825,13 @@ public final class SchematicLoader {
             }
             case 10: return readCompound(in);
             case 11: {
-                int len = in.readInt();
+                int len = checkedLen(in.readInt(), 4);
                 int[] arr = new int[len];
                 for (int i = 0; i < len; i++) arr[i] = in.readInt();
                 return arr;
             }
             case 12: {
-                int len = in.readInt();
+                int len = checkedLen(in.readInt(), 8);
                 long[] arr = new long[len];
                 for (int i = 0; i < len; i++) arr[i] = in.readLong();
                 return arr;

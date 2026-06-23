@@ -535,11 +535,49 @@ public final class BuildManager {
         // Don't snapshot a no-op (placing the same block on itself) — keeps
         // memory down on schematics that mostly re-set existing terrain.
         if (original.matches(bd)) return;
+        // Place through a BlockPlaceEvent attributed to the owner so land
+        // protection (WorldGuard, GriefPrevention, ...) can veto building on
+        // claims it doesn't own. Vetoed blocks are skipped and NOT snapshotted.
+        Player owner = Bukkit.getPlayer(job.ownerId);
+        if (!placeRespectingProtection(block, original, bd, owner)) return;
         job.snapshots.add(new BuildJob.Snapshot(wx, wy, wz, original, bd));
-        // applyPhysics=false: prevents cascading break events (sand falls,
-        // torches drop) during a high-volume build. Vanilla physics resumes
-        // for player-interaction once the build is done.
+    }
+
+    /**
+     * Place {@code bd} at {@code block}, attributed to {@code owner} via a
+     * {@link org.bukkit.event.block.BlockPlaceEvent} so land-protection
+     * plugins can cancel it. Returns {@code true} if the block was placed,
+     * {@code false} if a protection plugin vetoed it (block left untouched).
+     *
+     * <p>Uses the place-then-test-then-rollback pattern (the same one
+     * WorldEdit-style tools use to respect claims): the block is set with
+     * physics off, the event is fired, and if any listener cancels it the
+     * original {@code beforeData} is restored. {@code applyPhysics=false}
+     * keeps a high-volume build from triggering cascading sand/torch updates;
+     * vanilla physics resumes for normal player interaction afterwards.
+     *
+     * <p>Fail-open: if the owner is offline (can't attribute) or the event
+     * machinery throws, the block stays placed — on a server with no
+     * protection plugin this is the normal, correct outcome.
+     */
+    private boolean placeRespectingProtection(Block block, BlockData beforeData, BlockData bd, Player owner) {
+        org.bukkit.block.BlockState replaced = block.getState();
         block.setBlockData(bd, false);
+        if (owner == null) return true; // offline owner — can't fire an attributable event
+        try {
+            Block against = block.getRelative(BlockFace.DOWN);
+            org.bukkit.event.block.BlockPlaceEvent ev = new org.bukkit.event.block.BlockPlaceEvent(
+                    block, replaced, against, new ItemStack(bd.getMaterial()), owner, true);
+            Bukkit.getPluginManager().callEvent(ev);
+            if (ev.isCancelled() || !ev.canBuild()) {
+                block.setBlockData(beforeData, false); // roll back the veto
+                return false;
+            }
+        } catch (Throwable t) {
+            plugin.getLogger().fine("BlockPlaceEvent failed at "
+                    + block.getLocation() + ": " + t.getMessage());
+        }
+        return true;
     }
 
     private void tickRevert(BuildJob job) {

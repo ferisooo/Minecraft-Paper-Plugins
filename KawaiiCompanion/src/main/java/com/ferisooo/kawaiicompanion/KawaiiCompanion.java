@@ -48,6 +48,7 @@ import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.world.WorldUnloadEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -71,6 +72,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -640,6 +642,12 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
         boolean mobForm;
         /** Earliest behavior tick the mob-form companion may attack again. */
         long nextFormAttackTick;
+        /** Cached form-combat target + the next tick we're allowed to re-scan
+         *  for one. Throttles the per-tick getNearbyEntities sweep in
+         *  {@code pickFormTarget} — between scans the cached target is cheaply
+         *  re-validated instead of re-acquired. */
+        UUID formTargetId;
+        long nextFormTargetScanTick;
 
         // ----- FEATURE 2: leveling & abilities -----
         /** Persisted companion level (1..max-level). */
@@ -2293,6 +2301,7 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
         List<UUID> stale = new ArrayList<>();
         for (Map.Entry<UUID, Companion> e : companions.entrySet()) {
             Companion c = e.getValue();
+          try {
             Player owner = Bukkit.getPlayer(c.owner);
             if (owner == null || !owner.isOnline()) { stale.add(e.getKey()); continue; }
 
@@ -2396,6 +2405,13 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
             // disabled (a couple of boolean checks). Combat-kill XP comes in
             // through onEntityDeath; this handles the passive + aura side.
             tickLeveling(c, owner, tick);
+          } catch (Throwable t) {
+            // Isolate a single companion's failure so it can't abort the
+            // rest of this tick's companions. The timer itself survives
+            // (Bukkit catches), but without this one bad entity would freeze
+            // every other player's companion for that tick.
+            getLogger().warning("(✧) companion tick failed for " + e.getKey() + ": " + t);
+          }
         }
         for (UUID id : stale) {
             Companion c = companions.remove(id);
@@ -3252,6 +3268,10 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
     private static final double PATH_GOAL_DRIFT = 3.0;
     /** At most one repath this many ticks (2 sec @ 20 Hz). */
     private static final long PATH_REPATH_COOLDOWN_TICKS = 40;
+    /** Behavior ticks between full form-combat target re-scans. Between scans the
+     *  cached target is re-validated cheaply, so the costly getNearbyEntities
+     *  sweep runs at ~1 Hz instead of every tick. */
+    private static final long FORM_TARGET_SCAN_INTERVAL = 10;
     /** Treat companion as "stuck" after this many movement ticks under {@link #STUCK_MIN_MOVE_SQ}. */
     private static final int STUCK_TICK_THRESHOLD = 6;
     /** Less than ~0.15 block of horizontal motion per tick = stuck. */
@@ -4746,15 +4766,65 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
 
     @EventHandler
     public void onQuit(PlayerQuitEvent e) {
-        if (buildManager != null) buildManager.onPlayerQuit(e.getPlayer().getUniqueId());
-        Companion c = companions.remove(e.getPlayer().getUniqueId());
+        UUID id = e.getPlayer().getUniqueId();
+        if (buildManager != null) buildManager.onPlayerQuit(id);
+        Companion c = companions.remove(id);
         if (c != null) {
             saveMemory(c);
             if (c.realEntity) despawnRealEntity(c); else despawnEntity(c);
         }
         // Despawn the player's helper drones (ephemeral — no persistence).
-        List<Companion> ex = extras.remove(e.getPlayer().getUniqueId());
+        List<Companion> ex = extras.remove(id);
         if (ex != null) for (Companion d : ex) despawnCompanion(d);
+        // Drop the player's entries from the auxiliary per-player maps too —
+        // these aren't tied to the Companion object and would otherwise
+        // accumulate one stale entry per player forever (slow memory leak on
+        // a long-uptime server with player churn).
+        huntPicks.remove(id);
+        lastChatMillis.remove(id);
+        bedrockNoticeShown.remove(id);
+    }
+
+    /**
+     * Despawn companions left in a world that's being unloaded at runtime
+     * (e.g. a Multiverse / KawaiiWorlds world being torn down). A world can't
+     * unload while players are inside it, so any companion still here is
+     * already orphaned from its departed owner — if we don't clean it up the
+     * tick loop keeps poking a now-invalid entity, and a world-integrated fake
+     * player left in the level's player list pins the whole world in memory.
+     * Memory is saved first; the owner re-summons when they return.
+     */
+    @EventHandler
+    public void onWorldUnload(WorldUnloadEvent e) {
+        World unloading = e.getWorld();
+        Iterator<Map.Entry<UUID, Companion>> it = companions.entrySet().iterator();
+        while (it.hasNext()) {
+            Companion c = it.next().getValue();
+            if (companionWorld(c) != unloading) continue;
+            try { saveMemoryNow(c); } catch (Throwable ignored) {}
+            if (c.realEntity) despawnRealEntity(c); else despawnEntity(c);
+            it.remove();
+        }
+        for (List<Companion> list : extras.values()) {
+            list.removeIf(d -> {
+                if (companionWorld(d) != unloading) return false;
+                try { despawnCompanion(d); } catch (Throwable ignored) {}
+                return true;
+            });
+        }
+    }
+
+    /** The world a companion's body currently occupies, or null if it has none. */
+    private World companionWorld(Companion c) {
+        try {
+            if (c.realEntity) {
+                Entity e = liveRealEntity(c);
+                return e == null ? null : e.getWorld();
+            }
+            return c.entity == null ? null : c.entity.getWorld();
+        } catch (Throwable t) {
+            return null;
+        }
     }
 
     /**
@@ -7539,6 +7609,24 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
             c.assistTargetId = null;
             c.assistTargetUntil = 0;
         }
+        // Throttle the expensive getNearbyEntities sweep: a mob-form companion
+        // ticks every behavior tick, but re-acquiring a target that often is
+        // wasteful and scales as O(companions × nearby entities). Between scans
+        // keep fighting the cached target as long as it's still alive, hostile,
+        // in range and in the same world; only sweep again when the cache is
+        // empty/invalid or the throttle window has elapsed.
+        if (c.formTargetId != null && behaviorTickCount < c.nextFormTargetScanTick) {
+            Entity cached = Bukkit.getEntity(c.formTargetId);
+            if (cached instanceof LivingEntity le && !le.isDead() && le.isValid()
+                    && le.getWorld() == self.getWorld()
+                    && le.getLocation().distanceSquared(self.getLocation())
+                            <= formCombatRange * formCombatRange
+                    && isHostile(le) && !isCompanionEntity(le.getUniqueId())) {
+                return le;
+            }
+            c.formTargetId = null;
+        }
+        c.nextFormTargetScanTick = behaviorTickCount + FORM_TARGET_SCAN_INTERVAL;
         LivingEntity best = null;
         double bestSq = Double.MAX_VALUE;
         for (Entity ent : self.getNearbyEntities(formCombatRange, formCombatRange, formCombatRange)) {
@@ -7561,6 +7649,7 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
             double d = le.getLocation().distanceSquared(self.getLocation());
             if (d < bestSq) { bestSq = d; best = le; }
         }
+        c.formTargetId = (best == null) ? null : best.getUniqueId();
         return best;
     }
 
