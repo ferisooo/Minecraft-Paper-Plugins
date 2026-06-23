@@ -34,13 +34,52 @@ $pinkBorder  = [System.Drawing.Color]::FromArgb(255, 220, 130, 170)
 $pinkText    = [System.Drawing.Color]::FromArgb(255, 196,  60, 122)
 
 # ----- Tooling discovery --------------------------------------------------
+
+# True if the Maven at $mvncmd is actually runnable. The Maven bundled in this
+# repo is hollow - .gitignore excludes *.jar, so its boot/lib jars were never
+# committed and it dies with "-classpath requires class path specification".
+# A working Maven has a plexus-classworlds jar under its boot\ folder.
+function Test-MvnWorks([string]$mvncmd) {
+    if (-not $mvncmd) { return $false }
+    $mvnHome = Split-Path (Split-Path $mvncmd -Parent) -Parent
+    $boot = Join-Path $mvnHome 'boot'
+    if (-not (Test-Path $boot)) { return $false }
+    return @(Get-ChildItem -Path $boot -Filter 'plexus-classworlds*.jar' -ErrorAction SilentlyContinue).Count -gt 0
+}
+
+# Download a complete Apache Maven into tools\ on demand and return its mvn.cmd.
+function Ensure-RealMvn {
+    $ver  = '3.9.16'
+    $dest = Join-Path $Root 'tools'
+    $mvn  = Join-Path $dest "apache-maven-$ver\bin\mvn.cmd"
+    if (Test-Path $mvn) { return $mvn }
+    $url = "https://archive.apache.org/dist/maven/maven-3/$ver/binaries/apache-maven-$ver-bin.zip"
+    $zip = Join-Path $dest 'maven.zip'
+    try {
+        if (-not (Test-Path $dest)) { New-Item -ItemType Directory -Path $dest | Out-Null }
+        Append-Out "* Downloading Apache Maven $ver - one-time setup ..."
+        Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+        Append-Out '* Unzipping Maven ...'
+        Expand-Archive -Force -Path $zip -DestinationPath $dest
+        Remove-Item $zip -ErrorAction SilentlyContinue
+    } catch {
+        Append-Out "! Maven download failed: $_"
+        return $null
+    }
+    if (Test-Path $mvn) { return $mvn }
+    return $null
+}
+
 function Find-Mvn {
     $cmd = Get-Command mvn -ErrorAction SilentlyContinue
     if ($cmd) { return $cmd.Source }
+    # Use a bundled Maven ONLY if it actually has its jars (skip the hollow one).
     $bundled = Get-ChildItem -Path $Root -Recurse -Filter 'mvn.cmd' -ErrorAction SilentlyContinue |
+               Where-Object { Test-MvnWorks $_.FullName } |
                Select-Object -First 1
     if ($bundled) { return $bundled.FullName }
-    return $null
+    # Nothing usable found - fetch a real Maven into tools\.
+    return (Ensure-RealMvn)
 }
 
 function Find-Git {
