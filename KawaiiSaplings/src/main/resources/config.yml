@@ -1,0 +1,76 @@
+# KawaiiSaplings configuration.
+#
+# This plugin forces planted saplings to grow into trees on a timer, ignoring the
+# normal light and space rules. To grow "regardless of space" it CARVES OUT the room
+# the tree needs -- which means it can destroy nearby blocks. Read 'overwrite-scope'.
+
+# How often (in seconds) tracked saplings are forced to grow.
+growth-interval-seconds: 30
+
+# Max saplings grown per cycle. A throttle so a huge field of saplings can't freeze
+# the server. Leftover saplings are grown on following cycles.
+max-per-cycle: 20
+
+# Grow a full tree from a SINGLE dark-oak (and mega spruce/jungle) sapling, instead of
+# vanilla's 2x2 requirement. If false, lone dark-oak saplings are left alone.
+single-mega-trees: true
+
+# Replace the block under the sapling with dirt if it isn't valid soil, so the tree can root.
+fix-soil: true
+
+# What the plugin is allowed to overwrite to make room for the tree:
+#   all      - overwrite anything except 'protected-blocks' (true "regardless of space";
+#              WILL eat terrain and builds made of normal blocks near saplings)
+#   natural  - only overwrite natural blocks (stone, dirt, logs, leaves, plants, water...),
+#              never typical building blocks (planks, glass, concrete, wool, bricks...)
+#   air      - never overwrite solid blocks; a fully boxed-in sapling simply won't grow
+overwrite-scope: all
+
+# Clearance the plugin carves above the sapling (bounded for safety/performance).
+max-clear-radius: 3
+max-clear-height: 24
+
+# Blocks the plugin will NEVER destroy, even with overwrite-scope: all.
+protected-blocks:
+  - BEDROCK
+  - CHEST
+  - TRAPPED_CHEST
+  - BARREL
+  - SHULKER_BOX
+  - HOPPER
+  - DROPPER
+  - DISPENSER
+  - FURNACE
+  - BLAST_FURNACE
+  - SMOKER
+  - BREWING_STAND
+  - SPAWNER
+  - BEACON
+  - CONDUIT
+  - ENCHANTING_TABLE
+  - ENDER_CHEST
+  - END_PORTAL
+  - END_PORTAL_FRAME
+  - NETHER_PORTAL
+  - COMMAND_BLOCK
+  - CHAIN_COMMAND_BLOCK
+  - REPEATING_COMMAND_BLOCK
+  - STRUCTURE_BLOCK
+  - JIGSAW
+  - RESPAWN_ANCHOR
+  - LODESTONE
+
+# Pick up pre-existing / naturally-spread saplings by scanning chunks as they load.
+# Saplings a PLAYER plants are always tracked regardless of this. Enabling this scans
+# loaded chunks (off the main thread) which is heavier -- leave off unless you need it.
+scan-chunks-on-load: false
+
+# Sapling types to manage. Empty = all supported types (oak, birch, spruce, jungle,
+# acacia, dark oak, cherry, pale oak, mangrove propagule, azalea, flowering azalea).
+# Otherwise list Material names, e.g. [OAK_SAPLING, BIRCH_SAPLING].
+sapling-types: []
+
+# World filtering. If 'enabled-worlds' is non-empty, only those worlds are affected.
+# Otherwise all worlds except those in 'disabled-worlds'.
+enabled-worlds: []
+disabled-worlds: []

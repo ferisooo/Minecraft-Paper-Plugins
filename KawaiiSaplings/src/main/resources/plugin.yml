@@ -1,0 +1,18 @@
+name: KawaiiSaplings
+version: ${project.version}
+main: com.ferisooo.kawaiisaplings.KawaiiSaplings
+api-version: '1.21'
+author: Ferris
+description: Forces planted saplings to grow into trees on a timer, carving out room so they grow even when the space is not right.
+
+commands:
+  kawaiisaplings:
+    description: Force-grow saplings now / reload config.
+    aliases: [ksaplings, ks]
+    usage: /ks [reload|grow]
+    permission: kawaiisaplings.admin
+
+permissions:
+  kawaiisaplings.admin:
+    description: Reload config and force a growth cycle.
+    default: op
