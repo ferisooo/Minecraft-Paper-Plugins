@@ -8108,6 +8108,14 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
         if (at == null) return;
         if (owner.getWorld() != at.getWorld()) return;
         if (owner.getLocation().distance(at) > healAuraRange) return;
+        // Never heal a dead / respawning owner. Calling setHealth(>0) while the
+        // client is on the death screen revives them server-side only, leaving
+        // them stuck there: the Respawn button does nothing and a force-quit is
+        // the only recovery. This is exactly why a wither kill became
+        // un-respawnable — the aura tops the owner up so steadily that only a
+        // burst the pulse can't out-heal (the wither) actually lands a death,
+        // and the very next pulse then revived the corpse server-side.
+        if (owner.isDead() || owner.getHealth() <= 0.0) return;
         double max;
         try { max = owner.getMaxHealth(); } catch (Throwable t) { max = 20.0; }
         double hp = owner.getHealth();
