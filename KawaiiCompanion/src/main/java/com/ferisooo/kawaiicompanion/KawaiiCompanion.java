@@ -8104,6 +8104,12 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
 
     /** Gentle regen aura: top up the owner's HP if they're near + hurt. */
     private void applyHealAura(Companion c, Player owner) {
+        // Never touch a dead / respawning owner. While the client is on the
+        // death screen the player's health reads 0 (< max), so without this
+        // guard the aura would setHealth(>0) and revive them server-side only:
+        // the hearts never empty and the Respawn button does nothing, forcing a
+        // quit-to-menu to recover. Mirrors the guard FiveHearts/KawaiiGroups use.
+        if (owner.isDead() || owner.getHealth() <= 0.0) return;
         Location at = companionLoc(c);
         if (at == null) return;
         if (owner.getWorld() != at.getWorld()) return;
