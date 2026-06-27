@@ -78,10 +78,16 @@ public final class KawaiiDungeons extends JavaPlugin implements Listener {
         getServer().getPluginManager().registerEvents(new DungeonListeners(this, instanceManager, mobFactory), this);
 
         long tickTicks = Math.max(1L, getConfig().getLong("instance-tick-ticks", 20L));
-        Bukkit.getScheduler().runTaskTimer(this, () -> instanceManager.tickAll(), tickTicks, tickTicks);
+        // Folia-safe: a global-region repeating driver reads the live instance
+        // collection, then hops each instance's per-tick work onto the region
+        // thread owning that instance's world (entities/blocks there must only be
+        // touched on their own region thread). See InstanceManager.tickAll.
+        Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, task -> instanceManager.tickAll(), tickTicks, tickTicks);
 
-        // Shimmer the open dungeon menus.
-        Bukkit.getScheduler().runTaskTimer(this, this::animateGuis, 4L, 4L);
+        // Shimmer the open dungeon menus. Global-region driver reads the online
+        // players, then hops each player's inventory update onto that player's
+        // own entity scheduler (inventory is per-player region state).
+        Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, task -> animateGuis(), 4L, 4L);
 
         getLogger().info("(✿) KawaiiDungeons ready ~ " + dungeons.size() + " dungeon(s) loaded! /dungeon to begin~");
     }
@@ -90,6 +96,10 @@ public final class KawaiiDungeons extends JavaPlugin implements Listener {
     public void onDisable() {
         if (instanceManager != null) instanceManager.shutdownAll();
         if (progressManager != null) progressManager.saveSync();
+        // Folia: cancel our regionized scheduler tasks (tick driver, GUI driver,
+        // autosave, async writes) — the legacy Bukkit.getScheduler() doesn't exist.
+        Bukkit.getGlobalRegionScheduler().cancelTasks(this);
+        Bukkit.getAsyncScheduler().cancelTasks(this);
     }
 
     private void saveResourceIfMissing(String name) {
@@ -446,7 +456,12 @@ public final class KawaiiDungeons extends JavaPlugin implements Listener {
         for (UUID id : party.memberList()) {
             if (id.equals(p.getUniqueId())) continue;
             Player m = Bukkit.getPlayer(id);
-            if (m != null) { m.teleport(p.getLocation()); m.sendMessage("§d(✿) summoned to the party leader~"); moved++; }
+            if (m != null) {
+                Player member = m;
+                member.teleportAsync(p.getLocation()).thenRun(() ->
+                        member.sendMessage("§d(✿) summoned to the party leader~"));
+                moved++;
+            }
         }
         p.sendMessage("§d(✿) summoned §f" + moved + "§d member(s) to you~");
     }
@@ -534,11 +549,14 @@ public final class KawaiiDungeons extends JavaPlugin implements Listener {
     private void animateGuis() {
         guiFrame++;
         for (Player p : Bukkit.getOnlinePlayers()) {
-            Inventory top = p.getOpenInventory().getTopInventory();
-            if (top.getHolder() instanceof DgGuiHolder) {
-                paintBorder(top, guiFrame);
-                p.updateInventory();
-            }
+            // Touch the player's open inventory only on that player's region thread.
+            p.getScheduler().run(this, t -> {
+                Inventory top = p.getOpenInventory().getTopInventory();
+                if (top.getHolder() instanceof DgGuiHolder) {
+                    paintBorder(top, guiFrame);
+                    p.updateInventory();
+                }
+            }, null);
         }
     }
 

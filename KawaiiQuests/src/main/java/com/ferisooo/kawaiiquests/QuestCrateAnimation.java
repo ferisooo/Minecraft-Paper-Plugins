@@ -64,7 +64,9 @@ public final class QuestCrateAnimation implements Runnable {
     public void start() {
         render(pos);
         player.openInventory(inv);
-        Bukkit.getScheduler().runTask(plugin, this);
+        // Folia-safe: the animation touches this player only — run it on the
+        // player's entity scheduler.
+        player.getScheduler().run(plugin, t -> run(), null);
     }
 
     /** Hand the finished quest to the reel; it eases to a stop and reveals it. */
@@ -91,7 +93,7 @@ public final class QuestCrateAnimation implements Runnable {
             // Ease-out: delay grows as we approach the stop so the reel slows down.
             long delay = 1 + Math.round(6.0 * (pos - easeStart) / Math.max(1, stopAt - easeStart));
             pos++;
-            Bukkit.getScheduler().runTaskLater(plugin, this, delay);
+            player.getScheduler().runDelayed(plugin, t -> run(), null, Math.max(1, delay));
             return;
         }
 
@@ -103,7 +105,7 @@ public final class QuestCrateAnimation implements Runnable {
         if ((result != null && spun >= minSteps) || spun >= MAX_SPIN) {
             beginStop();
         }
-        Bukkit.getScheduler().runTaskLater(plugin, this, 2L);
+        player.getScheduler().runDelayed(plugin, t -> run(), null, 2L);
     }
 
     private void beginStop() {
@@ -129,9 +131,9 @@ public final class QuestCrateAnimation implements Runnable {
             }
         }
         // Let them admire the new quest scroll, then open the quest menu.
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+        player.getScheduler().runDelayed(plugin, t -> {
             if (onDone != null && player.isOnline()) onDone.run();
-        }, 35L);
+        }, null, 35L);
     }
 
     /** Frame the winning slot in green so the reveal reads as "locked in". */

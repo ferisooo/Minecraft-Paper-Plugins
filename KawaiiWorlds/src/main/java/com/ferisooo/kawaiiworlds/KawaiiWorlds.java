@@ -104,7 +104,7 @@ public final class KawaiiWorlds extends JavaPlugin implements TabExecutor, Liste
         }
         getServer().getPluginManager().registerEvents(this, this);
 
-        Bukkit.getScheduler().runTask(this, this::loadConfiguredWorlds);
+        Bukkit.getGlobalRegionScheduler().execute(this, this::loadConfiguredWorlds);
 
         getLogger().info("(✧) KawaiiWorlds ready ~");
     }
@@ -361,7 +361,7 @@ public final class KawaiiWorlds extends JavaPlugin implements TabExecutor, Liste
         World fallback = Bukkit.getWorlds().get(0);
         Location safe = fallback.getSpawnLocation();
         for (Player p : new ArrayList<>(w.getPlayers())) {
-            p.teleport(safe);
+            p.teleportAsync(safe);
         }
         boolean ok = Bukkit.unloadWorld(w, true);
         if (ok) {
@@ -393,7 +393,7 @@ public final class KawaiiWorlds extends JavaPlugin implements TabExecutor, Liste
             }
             World fallback = Bukkit.getWorlds().get(0);
             for (Player p : new ArrayList<>(w.getPlayers())) {
-                p.teleport(fallback.getSpawnLocation());
+                p.teleportAsync(fallback.getSpawnLocation());
             }
             boolean unloaded = Bukkit.unloadWorld(w, false);
             if (!unloaded) {
@@ -1115,7 +1115,7 @@ public final class KawaiiWorlds extends JavaPlugin implements TabExecutor, Liste
                 return;
             }
             for (Player pl : new ArrayList<>(w.getPlayers())) {
-                pl.teleport(Bukkit.getWorlds().get(0).getSpawnLocation());
+                pl.teleportAsync(Bukkit.getWorlds().get(0).getSpawnLocation());
             }
             if (Bukkit.unloadWorld(w, true)) p.sendMessage("§a(✧) unloaded '" + w.getName() + "'");
             else p.sendMessage("§c(✧) unload failed (something held it open)");
@@ -1217,7 +1217,7 @@ public final class KawaiiWorlds extends JavaPlugin implements TabExecutor, Liste
                 return false;
             }
             for (Player pl : new ArrayList<>(w.getPlayers())) {
-                pl.teleport(Bukkit.getWorlds().get(0).getSpawnLocation());
+                pl.teleportAsync(Bukkit.getWorlds().get(0).getSpawnLocation());
             }
             if (!Bukkit.unloadWorld(w, false)) {
                 p.sendMessage("§c(✧) couldn't unload '" + worldName + "' before delete");
@@ -1471,7 +1471,7 @@ public final class KawaiiWorlds extends JavaPlugin implements TabExecutor, Liste
         if (!p.hasPlayedBefore() && defaultSpawnWorld != null && !defaultSpawnWorld.isEmpty()) {
             World w = Bukkit.getWorld(defaultSpawnWorld);
             if (w != null) {
-                getServer().getScheduler().runTask(this, () -> p.teleport(w.getSpawnLocation()));
+                p.getScheduler().run(this, t -> p.teleportAsync(w.getSpawnLocation()), null);
             }
         }
         applyWorldForces(p, p.getWorld());
@@ -1570,7 +1570,7 @@ public final class KawaiiWorlds extends JavaPlugin implements TabExecutor, Liste
             }
         };
         if (isEnabled()) {
-            Bukkit.getScheduler().runTaskAsynchronously(this, writer);
+            Bukkit.getAsyncScheduler().runNow(this, t -> writer.run());
         } else {
             writer.run();
         }
@@ -1632,16 +1632,17 @@ public final class KawaiiWorlds extends JavaPlugin implements TabExecutor, Liste
         p.sendMessage("§d(✧) creating a §f" + type + "§d world.");
         p.sendMessage("§7type a name in chat (a-z, 0-9, _ -). type §fcancel§7 to abort.");
         UUID id = p.getUniqueId();
-        Bukkit.getScheduler().runTaskLater(this, () -> {
+        Bukkit.getGlobalRegionScheduler().runDelayed(this, task -> {
             PendingCreate pc = pendingCreate.get(id);
             if (pc != null && System.currentTimeMillis() - pc.createdMs >= PENDING_TIMEOUT_MS) {
                 pendingCreate.remove(id);
                 Player still = Bukkit.getPlayer(id);
                 if (still != null && still.isOnline()) {
-                    still.sendMessage("§7(✧) world-name prompt timed out");
+                    still.getScheduler().run(this, t ->
+                            still.sendMessage("§7(✧) world-name prompt timed out"), null);
                 }
             }
-        }, PENDING_TIMEOUT_MS / 50L);
+        }, Math.max(1, PENDING_TIMEOUT_MS / 50L));
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
@@ -1654,13 +1655,13 @@ public final class KawaiiWorlds extends JavaPlugin implements TabExecutor, Liste
         String name = PlainTextComponentSerializer.plainText().serialize(e.message()).trim();
         Player p = e.getPlayer();
         if (name.isEmpty() || name.equalsIgnoreCase("cancel")) {
-            Bukkit.getScheduler().runTask(this, () -> p.sendMessage("§7(✧) cancelled"));
+            p.getScheduler().run(this, t -> p.sendMessage("§7(✧) cancelled"), null);
             return;
         }
 
         final String chosen = name;
         final String type = pc.type;
-        Bukkit.getScheduler().runTask(this, () -> runGuiCreate(p, chosen, type));
+        Bukkit.getGlobalRegionScheduler().execute(this, () -> runGuiCreate(p, chosen, type));
     }
 
     private void runGuiCreate(Player p, String name, String type) {

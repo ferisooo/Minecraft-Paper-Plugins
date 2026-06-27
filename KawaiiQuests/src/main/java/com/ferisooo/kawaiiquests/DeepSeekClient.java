@@ -54,7 +54,7 @@ public final class DeepSeekClient {
             return;
         }
 
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+        Bukkit.getAsyncScheduler().runNow(plugin, task -> {
             Quest result;
             try {
                 result = request(diff, key, avoidTargets, recentTypes); // null if the AI gave an invalid/blocked quest
@@ -63,7 +63,10 @@ public final class DeepSeekClient {
                 result = null;
             }
             final Quest delivered = result;
-            Bukkit.getScheduler().runTask(plugin, () -> onResult.accept(delivered));
+            // Hop back onto a server thread to deliver the callback. The caller's
+            // consumer is responsible for routing any per-entity work to that
+            // entity's scheduler (it does — see KawaiiQuests#generate callback).
+            Bukkit.getGlobalRegionScheduler().execute(plugin, () -> onResult.accept(delivered));
         });
     }
 

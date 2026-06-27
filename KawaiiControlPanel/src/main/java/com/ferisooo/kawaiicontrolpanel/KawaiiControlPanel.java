@@ -18,7 +18,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.scheduler.BukkitTask;
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -70,7 +70,7 @@ public final class KawaiiControlPanel extends JavaPlugin implements Listener {
     private final List<String> noAutoReload = new ArrayList<>();
 
     /** Pending debounced reload tasks, keyed by plugin name. */
-    private final Map<String, BukkitTask> pendingReloads = new HashMap<>();
+    private final Map<String, ScheduledTask> pendingReloads = new HashMap<>();
 
     @Override
     public void onEnable() {
@@ -311,9 +311,12 @@ public final class KawaiiControlPanel extends JavaPlugin implements Listener {
 
     private void scheduleReload(String pluginName) {
         if (!autoReload || noAutoReload.contains(pluginName)) return;
-        BukkitTask old = pendingReloads.remove(pluginName);
+        ScheduledTask old = pendingReloads.remove(pluginName);
         if (old != null) old.cancel();
-        BukkitTask task = Bukkit.getScheduler().runTaskLater(this, () -> {
+        // Reloading a plugin's config / dispatching its console reload command is
+        // global/world-wide state with no direct cross-region entity mutation, so
+        // route the debounced task onto the global region scheduler (Folia-safe).
+        ScheduledTask task = Bukkit.getGlobalRegionScheduler().runDelayed(this, t -> {
             pendingReloads.remove(pluginName);
             applyReload(pluginName);
         }, Math.max(1L, reloadDelayTicks));
@@ -349,8 +352,10 @@ public final class KawaiiControlPanel extends JavaPlugin implements Listener {
 
     @Override
     public void onDisable() {
-        for (BukkitTask t : pendingReloads.values()) t.cancel();
+        for (ScheduledTask t : pendingReloads.values()) t.cancel();
         pendingReloads.clear();
+        Bukkit.getGlobalRegionScheduler().cancelTasks(this);
+        Bukkit.getAsyncScheduler().cancelTasks(this);
     }
 
     // ---------------------------------------------------------------

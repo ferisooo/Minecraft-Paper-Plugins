@@ -113,7 +113,7 @@ public final class KawaiiShop extends JavaPlugin implements Listener {
     // Debounced async persistence: balance mutations mark this dirty; a periodic
     // task snapshots money on the main thread and writes the bytes off-thread.
     private volatile boolean moneyDirty = false;
-    private org.bukkit.scheduler.BukkitTask flushTask;
+    private io.papermc.paper.threadedregions.scheduler.ScheduledTask flushTask;
 
     @Override
     public void onEnable() {
@@ -121,7 +121,7 @@ public final class KawaiiShop extends JavaPlugin implements Listener {
         loadAll();
         getServer().getPluginManager().registerEvents(this, this);
         // Debounced async flush of money.yml every 30s (600 ticks).
-        flushTask = Bukkit.getScheduler().runTaskTimer(this, this::flushMoneyAsync, 600L, 600L);
+        flushTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, task -> flushMoneyAsync(), 600L, 600L);
         getLogger().info("KawaiiShop enabled - " + categories.size() + " categories, "
                 + itemCount() + " items, skyblock-only.");
     }
@@ -262,7 +262,7 @@ public final class KawaiiShop extends JavaPlugin implements Listener {
         moneyDirty = false;
         final String data = money.saveToString();
         final File file = moneyFile;
-        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+        Bukkit.getAsyncScheduler().runNow(this, t -> {
             try {
                 Files.write(file.toPath(), data.getBytes(StandardCharsets.UTF_8));
             } catch (IOException e) {

@@ -2,6 +2,7 @@ name: KawaiiCam
 version: ${project.version}
 main: com.ferisooo.kawaiicam.KawaiiCam
 api-version: '1.21'
+folia-supported: true
 author: Ferris
 description: An autonomous cinematic camera that flies intelligent shots and records a replayable camera track.
 

@@ -10,8 +10,6 @@ import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -40,7 +38,9 @@ public final class DungeonInstance {
     public final DungeonDef def;
     public final Difficulty difficulty;
     public final UUID leader;
-    private final Set<UUID> participants = new HashSet<>();
+    // Concurrent: on Folia these collections are read by the global tick driver
+    // and mutated from region/event threads; keep them lock-free thread-safe.
+    private final Set<UUID> participants = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     // Endgame mode flags.
     public final boolean speedrun;
@@ -66,9 +66,9 @@ public final class DungeonInstance {
     private int wavesSpawned;
 
     // Downed players: id -> remaining ticks. Out players are removed from the run.
-    private final Map<UUID, Integer> downed = new HashMap<>();
-    private final Set<UUID> out = new HashSet<>();
-    private final Map<UUID, Location> downedReturn = new HashMap<>();
+    private final Map<UUID, Integer> downed = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Set<UUID> out = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private final Map<UUID, Location> downedReturn = new java.util.concurrent.ConcurrentHashMap<>();
 
     // Death bookkeeping for deathless tracking.
     private boolean anyDeath;

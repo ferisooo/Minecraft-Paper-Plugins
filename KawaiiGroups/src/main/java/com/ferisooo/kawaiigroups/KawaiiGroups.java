@@ -80,7 +80,7 @@ public final class KawaiiGroups extends JavaPlugin implements Listener {
     // Debounced async persistence: mutations mark this dirty; a periodic task
     // snapshots settings on the main thread and writes the bytes off-thread.
     private volatile boolean settingsDirty = false;
-    private org.bukkit.scheduler.BukkitTask flushTask;
+    private io.papermc.paper.threadedregions.scheduler.ScheduledTask flushTask;
 
     // ---- config ----
     private int baseHearts;
@@ -120,7 +120,7 @@ public final class KawaiiGroups extends JavaPlugin implements Listener {
         loadSettings();
         getServer().getPluginManager().registerEvents(this, this);
         // Debounced async flush of players.yml every 30s (600 ticks).
-        flushTask = Bukkit.getScheduler().runTaskTimer(this, this::flushSettingsAsync, 600L, 600L);
+        flushTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, task -> flushSettingsAsync(), 600L, 600L);
         getLogger().info("(✧) KawaiiGroups ready ~ groups, roles, invites & shared hearts!");
     }
 
@@ -135,6 +135,8 @@ public final class KawaiiGroups extends JavaPlugin implements Listener {
             }
         }
         if (flushTask != null) { flushTask.cancel(); flushTask = null; }
+        Bukkit.getGlobalRegionScheduler().cancelTasks(this);
+        Bukkit.getAsyncScheduler().cancelTasks(this);
         saveSettings(); // synchronous flush on shutdown so nothing is lost
     }
 
@@ -189,7 +191,7 @@ public final class KawaiiGroups extends JavaPlugin implements Listener {
         settingsDirty = false;
         final String data = settings.saveToString();
         final File file = settingsFile;
-        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+        Bukkit.getAsyncScheduler().runNow(this, task -> {
             try {
                 Files.write(file.toPath(), data.getBytes(StandardCharsets.UTF_8));
             } catch (IOException e) {
@@ -688,7 +690,7 @@ public final class KawaiiGroups extends JavaPlugin implements Listener {
         Player requester = Bukkit.getPlayer(req.requester);
         if (requester == null) { msg(p, "&cThey're no longer online."); return true; }
         Location dest = p.getLocation();
-        try { dest.getWorld().getChunkAt(dest); requester.teleport(dest); } catch (Throwable ignored) {}
+        try { requester.teleportAsync(dest); } catch (Throwable ignored) {}
         msg(requester, "&dTeleporting you to &f" + p.getName() + "&d~");
         msg(p, "&dAccepted &f" + requester.getName() + "&d's teleport.");
         return true;

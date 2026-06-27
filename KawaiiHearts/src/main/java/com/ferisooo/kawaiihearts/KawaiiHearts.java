@@ -25,14 +25,12 @@ import org.bukkit.entity.Projectile;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.scheduler.BukkitTask;
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.ArrayList;
 import java.util.EnumSet;
-import java.util.HashSet;
-import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -92,9 +90,25 @@ public final class KawaiiHearts extends JavaPlugin implements Listener {
     private final Set<EntityType> blacklist = EnumSet.noneOf(EntityType.class);
     private final Set<EntityType> onlyTypes = EnumSet.noneOf(EntityType.class);
 
-    /** UUIDs of mobs currently wearing a bar (so we know which to hide). */
-    private final Set<UUID> activeBars = new HashSet<>();
-    private BukkitTask scanTask;
+    /**
+     * Mobs currently wearing a bar, mapped to the scan generation in which they
+     * were last seen near a player (so we know which to hide).
+     * <p>Folia-safe: the proximity-scan driver runs on the global-region thread,
+     * but the per-player nearby scans run on each player's own region thread and
+     * the per-mob mutations run on each mob's own entity-scheduler thread, so this
+     * map is touched from multiple region threads — back it with a concurrent map.
+     */
+    private final java.util.concurrent.ConcurrentMap<UUID, Long> activeBars =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * Monotonic scan counter. Bumped once per {@link #proximityScan()} so the
+     * delayed hide pass can tell which mobs were refreshed this scan (current
+     * generation) versus ones no player is near anymore (an older generation).
+     */
+    private final java.util.concurrent.atomic.AtomicLong scanGeneration =
+            new java.util.concurrent.atomic.AtomicLong();
+    private ScheduledTask scanTask;
 
     // ------------------------------------------------------------------ lifecycle
 
@@ -110,8 +124,12 @@ public final class KawaiiHearts extends JavaPlugin implements Listener {
         getServer().getPluginManager().registerEvents(this, this);
 
         // Proximity scan handles showing/hiding bars near players.
-        scanTask = Bukkit.getScheduler().runTaskTimer(this, this::proximityScan,
-                scanTicks, scanTicks);
+        // Folia-safe: a global-region repeating driver only READS the online-player
+        // and nearby-entity collections, then hops each mob's name mutation onto
+        // THAT mob's entity scheduler (custom names must only be touched on the
+        // entity's region thread). Works identically on Paper/Purpur and Folia.
+        scanTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(this,
+                task -> proximityScan(), Math.max(1L, scanTicks), Math.max(1L, scanTicks));
 
         getLogger().info("(\u2727) KawaiiHearts ready ~ mode=" + mode
                 + " hearts=" + maxHearts + " radius=" + viewRadius + " \u2764");
@@ -120,6 +138,8 @@ public final class KawaiiHearts extends JavaPlugin implements Listener {
     @Override
     public void onDisable() {
         if (scanTask != null) scanTask.cancel();
+        Bukkit.getGlobalRegionScheduler().cancelTasks(this);
+        Bukkit.getAsyncScheduler().cancelTasks(this);
         // Be a good citizen: hand every managed mob its original name back.
         for (var world : Bukkit.getWorlds()) {
             for (LivingEntity le : world.getLivingEntities()) {
@@ -282,55 +302,79 @@ public final class KawaiiHearts extends JavaPlugin implements Listener {
         if (!enabled) {
             return;
         }
-        Set<UUID> near = collectNearbyEligible();
+        // One generation per scan. Mobs refreshed this scan get stamped with it;
+        // the delayed hide pass restores any active mob still on an older stamp.
+        final long gen = scanGeneration.incrementAndGet();
 
-        // Show / refresh nearby mobs.
-        for (UUID id : near) {
-            Entity e = Bukkit.getEntity(id);
-            if (e instanceof LivingEntity le && le.isValid() && !le.isDead()) {
-                track(le);
-            }
+        // Folia-safe driver: only READ the server-level online-player collection
+        // here (global-region thread), then hop each player's nearby scan onto
+        // THAT player's region thread, where reading the player's location and
+        // nearby entities is legal.
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            p.getScheduler().run(this, t -> scanForPlayer(p, gen), null);
         }
 
-        // Hide mobs that are no longer near any player.
-        for (UUID id : new ArrayList<>(activeBars)) {
-            if (near.contains(id)) continue;
-            Entity e = Bukkit.getEntity(id);
-            if (e instanceof LivingEntity le) restore(le);
-            activeBars.remove(id);
+        // Hide pass: run after the per-player scans have had a tick to stamp the
+        // mobs they saw. Each mob's restore hops onto that mob's region thread.
+        Bukkit.getGlobalRegionScheduler().runDelayed(this, t -> hideStale(gen), 1L);
+    }
+
+    /**
+     * Stamp every eligible mob within view-radius of {@code p} with the current
+     * scan generation and (re)apply its bar. Runs on {@code p}'s region thread.
+     */
+    private void scanForPlayer(Player p, long gen) {
+        if (!enabled || !p.isOnline()) return;
+        // viewRadius is always positive here (clamped in loadConfigValues).
+        double r2 = viewRadius * viewRadius;
+        for (Entity e : p.getNearbyEntities(viewRadius, viewRadius, viewRadius)) {
+            if (!eligible(e)) continue;
+            if (e.getLocation().distanceSquared(p.getLocation()) > r2) continue;
+            if (!(e instanceof LivingEntity le) || le.isDead() || !le.isValid()) continue;
+            // Mark seen this scan immediately so the hide pass keeps it; the
+            // name mutation hops onto the mob's own region thread (Folia-safe).
+            activeBars.put(le.getUniqueId(), gen);
+            le.getScheduler().run(this, st -> {
+                if (le.isValid() && !le.isDead()) track(le, gen);
+            }, null);
         }
     }
 
-    /** Collect UUIDs of eligible mobs within view-radius of any online player. */
-    private Set<UUID> collectNearbyEligible() {
-        Set<UUID> set = new HashSet<>();
-
-        // viewRadius is always positive here (clamped in loadConfigValues).
-        double r2 = viewRadius * viewRadius;
-        for (Player p : Bukkit.getOnlinePlayers()) {
-            for (Entity e : p.getNearbyEntities(viewRadius, viewRadius, viewRadius)) {
-                if (!eligible(e)) continue;
-                if (e.getLocation().distanceSquared(p.getLocation()) <= r2) {
-                    set.add(e.getUniqueId());
-                }
+    /**
+     * Restore bars on mobs that no player refreshed during scan {@code gen}
+     * (i.e. everyone walked away). Runs on the global-region thread, hopping each
+     * mob's restore onto that mob's own region thread.
+     */
+    private void hideStale(long gen) {
+        for (Map.Entry<UUID, Long> entry : activeBars.entrySet()) {
+            if (entry.getValue() != null && entry.getValue() >= gen) continue;
+            UUID id = entry.getKey();
+            Entity e = Bukkit.getEntity(id);
+            if (e instanceof LivingEntity le) {
+                le.getScheduler().run(this, t -> restore(le), null);
             }
+            activeBars.remove(id);
         }
-        return set;
     }
 
     // ------------------------------------------------------------------ core
 
     private void scheduleTrack(Entity e) {
         if (!(e instanceof LivingEntity le)) return;
-        Bukkit.getScheduler().runTask(this, () -> {
-            if (le.isValid() && !le.isDead()) track(le);
-        });
+        // Health updates next tick on the mob's own region thread (Folia-safe).
+        le.getScheduler().run(this, t -> {
+            if (le.isValid() && !le.isDead()) track(le, scanGeneration.get());
+        }, null);
     }
 
-    /** Apply/refresh a mob's bar and keep the active-set membership in sync. */
-    private void track(LivingEntity le) {
+    /**
+     * Apply/refresh a mob's bar and keep the active-map membership in sync.
+     * Stamps the mob with scan generation {@code gen} when a bar is shown so the
+     * proximity hide pass treats an event-driven refresh as "seen this scan".
+     */
+    private void track(LivingEntity le, long gen) {
         if (updateEntity(le)) {
-            activeBars.add(le.getUniqueId());
+            activeBars.put(le.getUniqueId(), gen);
         } else {
             activeBars.remove(le.getUniqueId());
         }
@@ -463,11 +507,14 @@ public final class KawaiiHearts extends JavaPlugin implements Listener {
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command,
                              @NotNull String label, @NotNull String[] args) {
         if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
-            // Strip current bars so a mode/format change applies cleanly.
+            // Strip current bars so a mode/format change applies cleanly. The
+            // command may run on any single region thread, but each mob's custom
+            // name must only be touched on that mob's own region thread — so hop
+            // every restore onto the mob's entity scheduler (Folia-safe).
             for (var world : Bukkit.getWorlds()) {
                 for (LivingEntity le : world.getLivingEntities()) {
                     if (le.getPersistentDataContainer().has(managedKey, PersistentDataType.BYTE)) {
-                        restore(le);
+                        le.getScheduler().run(this, t -> restore(le), null);
                     }
                 }
             }
@@ -475,8 +522,8 @@ public final class KawaiiHearts extends JavaPlugin implements Listener {
             loadConfigValues();
             // Reschedule the scan in case scan-interval-ticks changed.
             if (scanTask != null) scanTask.cancel();
-            scanTask = Bukkit.getScheduler().runTaskTimer(this, this::proximityScan,
-                    scanTicks, scanTicks);
+            scanTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(this,
+                    task -> proximityScan(), Math.max(1L, scanTicks), Math.max(1L, scanTicks));
             refreshAllLoaded();
             sender.sendMessage(AMP.deserialize("&d(\u2727) KawaiiHearts reloaded~ "
                     + (enabled ? "&abeating!" : "&7(disabled)")));

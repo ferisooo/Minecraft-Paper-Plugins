@@ -29,7 +29,6 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -85,11 +84,14 @@ public final class KawaiiNights extends JavaPlugin implements Listener {
     private long raidDurationMillis;
     private String raidSoundKey;
     private final List<EntityType> raidMobs = new ArrayList<>();
-    private final Map<String, NightState> nights = new HashMap<>();
+    // Concurrent: on Folia these are read/written from multiple region threads
+    // (the world-region raid bookkeeping, the victim-region horde spawn, and the
+    // player-region bed/death events), so they must be thread-safe collections.
+    private final Map<String, NightState> nights = new java.util.concurrent.ConcurrentHashMap<>();
     private NamespacedKey raidTagKey;
 
     /** UUIDs of currently-living raid-spawned mobs, so we needn't scan all world entities. */
-    private final Set<UUID> raidMobIds = new HashSet<>();
+    private final Set<UUID> raidMobIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     /** Per-world night bookkeeping: night/raid state + pending raids for the night. */
     private static final class NightState {
@@ -105,8 +107,19 @@ public final class KawaiiNights extends JavaPlugin implements Listener {
         readConfig();
         raidTagKey = new NamespacedKey(this, "raid");
         getServer().getPluginManager().registerEvents(this, this);
-        Bukkit.getScheduler().runTaskTimer(this, this::tick, checkTicks, checkTicks);
+        // Folia-safe: a global-region repeating driver runs the bookkeeping that
+        // only reads collections/plugin state, then hops each region-touching unit
+        // of work onto the correct scheduler — per-player work onto that player's
+        // entity scheduler, and per-world raid/cull work onto a region thread for
+        // that world. Identical cadence on Paper/Purpur (single-threaded) and Folia.
+        Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, task -> tick(), checkTicks, checkTicks);
         getLogger().info("(✧) KawaiiNights ready ~ the dark is always hungry 🌙");
+    }
+
+    @Override
+    public void onDisable() {
+        Bukkit.getGlobalRegionScheduler().cancelTasks(this);
+        Bukkit.getAsyncScheduler().cancelTasks(this);
     }
 
     private void readConfig() {
@@ -173,19 +186,27 @@ public final class KawaiiNights extends JavaPlugin implements Listener {
         if (raidsEnabled) tickRaids();
         if (mobsPerPlayer == 0) return;
 
+        // The driver only READS the online-player collection here; the actual
+        // per-player spawning (which reads nearby blocks/entities and spawns mobs
+        // around the player) must run on that player's own region thread.
         for (Player p : Bukkit.getOnlinePlayers()) {
-            World w = p.getWorld();
-            if (!applies(w)) continue;
-            if (w.getDifficulty() == Difficulty.PEACEFUL) continue; // hostiles can't live
-            GameMode gm = p.getGameMode();
-            if (gm == GameMode.CREATIVE || gm == GameMode.SPECTATOR) continue;
-            if (countNearbyHostiles(p) >= nearbyCap) continue;
+            p.getScheduler().run(this, t -> trickleSpawn(p), null);
+        }
+    }
 
-            // Trickle spawner: day or night, any weather/biome — just MORE at night.
-            int count = isNight(w) ? (int) Math.round(mobsPerPlayer * nightMultiplier) : mobsPerPlayer;
-            for (int i = 0; i < count; i++) {
-                trySpawn(p, mobs.get(rnd(mobs.size())), minRadius, maxRadius, false, false);
-            }
+    /** Per-player trickle spawn — runs on the player's own region thread (Folia-safe). */
+    private void trickleSpawn(Player p) {
+        World w = p.getWorld();
+        if (!applies(w)) return;
+        if (w.getDifficulty() == Difficulty.PEACEFUL) return; // hostiles can't live
+        GameMode gm = p.getGameMode();
+        if (gm == GameMode.CREATIVE || gm == GameMode.SPECTATOR) return;
+        if (countNearbyHostiles(p) >= nearbyCap) return;
+
+        // Trickle spawner: day or night, any weather/biome — just MORE at night.
+        int count = isNight(w) ? (int) Math.round(mobsPerPlayer * nightMultiplier) : mobsPerPlayer;
+        for (int i = 0; i < count; i++) {
+            trySpawn(p, mobs.get(rnd(mobs.size())), minRadius, maxRadius, false, false);
         }
     }
 
@@ -193,39 +214,48 @@ public final class KawaiiNights extends JavaPlugin implements Listener {
 
     private void tickRaids() {
         if (raidMobs.isEmpty()) return;
-        long now = System.currentTimeMillis();
+        // The driver only READS the world list here; each world's raid bookkeeping
+        // reads that world's time/difficulty/entities and spawns mobs, so it must
+        // run on a region thread that owns that world's state (Folia-safe). We
+        // anchor on the world's spawn location to pick the right region.
         for (World w : Bukkit.getWorlds()) {
             if (!applies(w)) continue;
-            NightState st = nights.computeIfAbsent(w.getName(), k -> new NightState());
-            boolean night = w.getDifficulty() != Difficulty.PEACEFUL && isNight(w);
-
-            if (night && !st.wasNight) planNight(st); // dusk just fell — schedule the night's raids
-            if (night && !st.pending.isEmpty()) {
-                long tod = w.getTime();
-                Iterator<Long> it = st.pending.iterator();
-                while (it.hasNext()) {
-                    if (tod >= it.next()) {
-                        it.remove();
-                        fireRaid(w, raidMobs.get(rnd(raidMobs.size())));
-                    }
-                }
-            }
-            st.wasNight = night;
-
-            // Raid "active" window — drives the no-sleep rule + an end notice.
-            // Ends as soon as all the raid's mobs are dead (or the timer caps it).
-            boolean active = now < st.activeUntilMillis;
-            if (active && raidMobsCleared(w)) {
-                st.activeUntilMillis = 0; // horde wiped out — let players rest now
-                active = false;
-            }
-            if (st.wasActive && !active && raidAnnounce) {
-                for (Player p : w.getPlayers()) {
-                    p.sendMessage("§a(✧) the horde has thinned~ you can rest now. 🌙");
-                }
-            }
-            st.wasActive = active;
+            Bukkit.getRegionScheduler().execute(this, w.getSpawnLocation(), () -> tickRaidsForWorld(w));
         }
+    }
+
+    /** Per-world raid bookkeeping — runs on a region thread owning the world (Folia-safe). */
+    private void tickRaidsForWorld(World w) {
+        long now = System.currentTimeMillis();
+        NightState st = nights.computeIfAbsent(w.getName(), k -> new NightState());
+        boolean night = w.getDifficulty() != Difficulty.PEACEFUL && isNight(w);
+
+        if (night && !st.wasNight) planNight(st); // dusk just fell — schedule the night's raids
+        if (night && !st.pending.isEmpty()) {
+            long tod = w.getTime();
+            Iterator<Long> it = st.pending.iterator();
+            while (it.hasNext()) {
+                if (tod >= it.next()) {
+                    it.remove();
+                    fireRaid(w, raidMobs.get(rnd(raidMobs.size())));
+                }
+            }
+        }
+        st.wasNight = night;
+
+        // Raid "active" window — drives the no-sleep rule + an end notice.
+        // Ends as soon as all the raid's mobs are dead (or the timer caps it).
+        boolean active = now < st.activeUntilMillis;
+        if (active && raidMobsCleared(w)) {
+            st.activeUntilMillis = 0; // horde wiped out — let players rest now
+            active = false;
+        }
+        if (st.wasActive && !active && raidAnnounce) {
+            for (Player p : w.getPlayers()) {
+                p.sendMessage("§a(✧) the horde has thinned~ you can rest now. 🌙");
+            }
+        }
+        st.wasActive = active;
     }
 
     /** True if no living raid-tagged mobs remain in the world. */
@@ -272,20 +302,36 @@ public final class KawaiiNights extends JavaPlugin implements Listener {
                 .activeUntilMillis = System.currentTimeMillis() + raidDurationMillis;
 
         if (raidAnnounce) {
-            // Big on-screen title for the player being hunted.
-            try {
-                victim.sendTitle("§4§l⚔ A raid is happening!",
-                        "§ca horde of §f" + pluralize(type) + " §cis hunting you!", 10, 60, 20);
-            } catch (Throwable ignored) {}
             // Server-wide chat shout (names the victim) + raid sound for everyone.
+            // sendMessage is thread-safe, but playSound touches each player, so it
+            // hops onto that player's own region thread (Folia-safe).
             String shout = "§4⚔ §cRaid! §fA horde of " + pluralize(type)
                     + " §cis attacking §f" + victim.getName() + "§c! ⚔";
             for (Player p : getServer().getOnlinePlayers()) {
                 p.sendMessage(shout);
                 if (raidSoundKey != null) {
-                    try { p.playSound(p.getLocation(), raidSoundKey, 1.2f, 1.0f); } catch (Throwable ignored) {}
+                    p.getScheduler().run(this, t -> {
+                        try { p.playSound(p.getLocation(), raidSoundKey, 1.2f, 1.0f); } catch (Throwable ignored) {}
+                    }, null);
                 }
             }
+        }
+
+        // The title + horde spawn all touch the victim and the blocks/entities
+        // around them, so they must run on the victim's own region thread (Folia).
+        final EntityType raidType = type;
+        final String worldName = w.getName();
+        victim.getScheduler().run(this, t -> spawnRaidHorde(victim, raidType, worldName), null);
+    }
+
+    /** Spawn the horde around the victim + title them — runs on the victim's region thread. */
+    private void spawnRaidHorde(Player victim, EntityType type, String worldName) {
+        if (raidAnnounce) {
+            // Big on-screen title for the player being hunted.
+            try {
+                victim.sendTitle("§4§l⚔ A raid is happening!",
+                        "§ca horde of §f" + pluralize(type) + " §cis hunting you!", 10, 60, 20);
+            } catch (Throwable ignored) {}
         }
 
         // Spawn the horde around the victim and point every mob AT them.
@@ -300,7 +346,7 @@ public final class KawaiiNights extends JavaPlugin implements Listener {
             }
             spawned++;
         }
-        getLogger().info("(✧) raid in " + w.getName() + " on " + victim.getName()
+        getLogger().info("(✧) raid in " + worldName + " on " + victim.getName()
                 + ": " + type + " (spawned " + spawned + ")");
     }
 
@@ -436,14 +482,22 @@ public final class KawaiiNights extends JavaPlugin implements Listener {
 
     /** Remove all non-persistent hostile mobs (except bosses) in applicable worlds. */
     private void cullHostiles() {
-        int removed = 0;
+        // Iterating a world's entities and removing them must happen on a region
+        // thread owning that world (Folia-safe). The driver only reads the world
+        // list; each world's cull hops to a region thread anchored at its spawn.
         for (World w : Bukkit.getWorlds()) {
             if (!applies(w)) continue;
-            for (Monster e : w.getEntitiesByClass(Monster.class)) {
-                if (!BOSSES.contains(e.getType()) && !e.isPersistent()) {
-                    e.remove();
-                    removed++;
-                }
+            Bukkit.getRegionScheduler().execute(this, w.getSpawnLocation(), () -> cullHostilesIn(w));
+        }
+    }
+
+    /** Cull non-persistent hostiles in one world — runs on that world's region thread. */
+    private void cullHostilesIn(World w) {
+        int removed = 0;
+        for (Monster e : w.getEntitiesByClass(Monster.class)) {
+            if (!BOSSES.contains(e.getType()) && !e.isPersistent()) {
+                e.remove();
+                removed++;
             }
         }
         if (removed > 0) {

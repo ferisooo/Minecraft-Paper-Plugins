@@ -40,7 +40,10 @@ public final class ProgressManager {
      * off-thread, replacing the old per-mutation synchronous main-thread write.
      */
     public void startAutoSave() {
-        plugin.getServer().getScheduler().runTaskTimer(plugin, this::flush,
+        // Folia-safe: the flush only reads/writes the in-memory progress map
+        // (global server state, no entity mutation), so a global-region timer
+        // is correct. The actual disk write is handed to the async scheduler.
+        plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(plugin, task -> flush(),
                 SAVE_INTERVAL_TICKS, SAVE_INTERVAL_TICKS);
     }
 
@@ -132,7 +135,7 @@ public final class ProgressManager {
         if (!dirty) return;
         dirty = false;
         final String yaml = snapshot().saveToString();
-        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> write(yaml));
+        plugin.getServer().getAsyncScheduler().runNow(plugin, task -> write(yaml));
     }
 
     /** Synchronous flush for shutdown: snapshot and write inline so no data is lost. */

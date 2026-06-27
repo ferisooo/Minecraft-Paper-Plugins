@@ -696,21 +696,29 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
         // ARE world entities though — sweep up any orphans left by a crash or
         // by chunk saves from older builds (they used to be persistent), since
         // an orphan is an invulnerable mob with full vanilla hostile AI.
-        Bukkit.getScheduler().runTask(this, () -> {
-            int n = 0;
-            for (World w : Bukkit.getWorlds()) n += sweepOrphanCompanions(w.getEntities());
-            if (n > 0) getLogger().info("(✧) removed " + n + " orphaned companion mob(s)");
+        // Folia-safe orphan sweep: a global-region task reads the loaded-entity
+        // collections, then hops each orphan's removal onto THAT entity's own
+        // region thread (entity mutation must happen on its region thread).
+        Bukkit.getGlobalRegionScheduler().execute(this, () -> {
+            for (World w : Bukkit.getWorlds()) {
+                for (Entity e : w.getEntities()) {
+                    if (!isOrphanCompanion(e)) continue;
+                    e.getScheduler().run(this, t -> {
+                        try { e.remove(); } catch (Throwable ignored) {}
+                    }, null);
+                }
+            }
         });
 
-        Bukkit.getScheduler().runTaskTimer(this,
-                this::movementTick, movementTickPeriod, movementTickPeriod);
+        Bukkit.getGlobalRegionScheduler().runAtFixedRate(this,
+                task -> movementTick(), Math.max(1L, movementTickPeriod), Math.max(1L, movementTickPeriod));
 
         // Mirror the visible NPC onto its navigator EVERY game tick (20 Hz), so
         // following looks smooth instead of stepping at the 10 Hz behaviour rate.
-        Bukkit.getScheduler().runTaskTimer(this, this::navMirrorTick, 1L, 1L);
+        Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, task -> navMirrorTick(), 1L, 1L);
 
         // Steer a ridden companion every game tick (20 Hz) for smooth control.
-        Bukkit.getScheduler().runTaskTimer(this, this::rideTick, 1L, 1L);
+        Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, task -> rideTick(), 1L, 1L);
 
         // World-integrated companions have a stub Connection whose
         // pendingActions queue accumulates packets from server-internal
@@ -719,7 +727,7 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
         // just clears a ConcurrentLinkedQueue per companion. Skip when
         // world-integrated is off — there's nothing queueing in that mode.
         if (worldIntegrated) {
-            Bukkit.getScheduler().runTaskTimer(this, () -> {
+            Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, task -> {
                 for (Companion c : companions.values()) {
                     if (c.entity != null) c.entity.clearStubPending();
                 }
@@ -737,6 +745,8 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
 
     @Override
     public void onDisable() {
+        Bukkit.getGlobalRegionScheduler().cancelTasks(this);
+        Bukkit.getAsyncScheduler().cancelTasks(this);
         if (buildManager != null) buildManager.shutdown();
         // Scheduler is shutting down — saveMemory's async write won't fire.
         // Use the synchronous path so memory actually hits disk on stop.
@@ -1404,7 +1414,7 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
             p.sendMessage("§d(✧) " + existing.name + " is already with you~");
             if (existing.realEntity) {
                 Entity re = liveRealEntity(existing);
-                if (re != null) re.teleport(spawnLocFor(p));
+                if (re != null) re.teleportAsync(spawnLocFor(p));
             } else if (existing.entity != null) {
                 existing.entity.teleport(spawnLocFor(p));
             }
@@ -2079,7 +2089,7 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
             }
             any = true;
             getLogger().info("(✧) uploading " + png.getName() + " to mineskin.org…");
-            Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+            Bukkit.getAsyncScheduler().runNow(this, t -> {
                 try {
                     uploadPng(png, json);
                 } finally {
@@ -2268,15 +2278,21 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
             org.bukkit.NamespacedKey markerKey = companionMarkerKey();
             for (World w : Bukkit.getWorlds()) {
                 for (Entity e : w.getEntities()) {
-                    boolean marked = false;
-                    try {
-                        marked = e.getPersistentDataContainer().has(markerKey,
-                                org.bukkit.persistence.PersistentDataType.STRING);
-                    } catch (Throwable ignored) {}
-                    if (!marked) continue;
-                    // Only an UNTRACKED marker-tagged mob is an orphan to clean.
+                    // Only an UNTRACKED mob can be an orphan to clean; this cheap
+                    // tracked-check is global-safe (just a map lookup).
                     if (isCompanionEntity(e.getUniqueId())) continue;
-                    try { e.remove(); } catch (Throwable ignored) {}
+                    // Folia: the marker PDC read + remove() must run on the
+                    // entity's own region thread — hop there.
+                    e.getScheduler().run(this, schedTask -> {
+                        boolean marked = false;
+                        try {
+                            marked = e.getPersistentDataContainer().has(markerKey,
+                                    org.bukkit.persistence.PersistentDataType.STRING);
+                        } catch (Throwable ignored) {}
+                        if (!marked) return;
+                        if (isCompanionEntity(e.getUniqueId())) return;
+                        try { e.remove(); } catch (Throwable ignored) {}
+                    }, null);
                 }
             }
         }
@@ -2284,22 +2300,56 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
         List<UUID> stale = new ArrayList<>();
         for (Map.Entry<UUID, Companion> e : companions.entrySet()) {
             Companion c = e.getValue();
-          try {
             Player owner = Bukkit.getPlayer(c.owner);
             if (owner == null || !owner.isOnline()) { stale.add(e.getKey()); continue; }
+            // Folia: the per-companion body mutates the owner's player state
+            // and her navigator/real entity, which all live in the owner's
+            // region. Hop the whole body onto the owner's region thread.
+            owner.getScheduler().run(this, schedTask -> tickCompanion(c, owner, tick, e.getKey()), null);
+        }
+        for (UUID id : stale) {
+            Companion c = companions.remove(id);
+            if (c != null) { saveMemory(c); if (c.realEntity) despawnRealEntity(c); else despawnEntity(c); }
+        }
+
+        // Op-only helper drones — lean tick (no chat). Despawn an owner's
+        // helpers when they log off.
+        if (!extras.isEmpty()) {
+            for (Map.Entry<UUID, List<Companion>> en : extras.entrySet()) {
+                Player owner = Bukkit.getPlayer(en.getKey());
+                java.util.Iterator<Companion> it = en.getValue().iterator();
+                while (it.hasNext()) {
+                    Companion c = it.next();
+                    if (owner == null || !owner.isOnline()) { despawnCompanion(c); it.remove(); continue; }
+                    owner.getScheduler().run(this, schedTask -> tickExtra(c, owner, tick), null);
+                }
+            }
+        }
+    }
+
+    /**
+     * Per-companion movement/behaviour body, run on the OWNER's region thread
+     * (Folia) so all the entity/player mutation it does happens on the right
+     * thread. Hopped here from {@link #movementTick()} via the owner's
+     * EntityScheduler. The owner-online + stale check stays on the global
+     * driver; by the time this runs the owner may have logged off, so re-check.
+     */
+    private void tickCompanion(Companion c, Player owner, long tick, UUID id) {
+        try {
+            if (owner == null || !owner.isOnline()) return;
 
             // FEATURE 1: real-entity (Bedrock) companions take a completely
             // separate, lightweight tick — follow + abilities — and never
             // touch the NMS fake-player path below.
             if (c.realEntity) {
                 tickRealEntity(c, owner, tick);
-                continue;
+                return;
             }
 
             // No entity → spawn failed earlier or it was despawned. Don't
             // auto-respawn here; that turns a one-shot reflection error
             // into a 5x/sec chat spam. /kc summon is the explicit retry.
-            if (c.entity == null || c.entity.isDead()) continue;
+            if (c.entity == null || c.entity.isDead()) return;
 
             // Keep the click hitbox glued to the companion's current
             // position. Cheap (per-companion teleport on a non-rendering
@@ -2387,31 +2437,10 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
             // Ability pulses (heal aura). Cheap when disabled (a single
             // boolean check). Leveling/XP was removed entirely.
             tickAbilities(c, owner, tick);
-          } catch (Throwable t) {
+        } catch (Throwable t) {
             // Isolate a single companion's failure so it can't abort the
-            // rest of this tick's companions. The timer itself survives
-            // (Bukkit catches), but without this one bad entity would freeze
-            // every other player's companion for that tick.
-            getLogger().warning("(✧) companion tick failed for " + e.getKey() + ": " + t);
-          }
-        }
-        for (UUID id : stale) {
-            Companion c = companions.remove(id);
-            if (c != null) { saveMemory(c); if (c.realEntity) despawnRealEntity(c); else despawnEntity(c); }
-        }
-
-        // Op-only helper drones — lean tick (no chat). Despawn an owner's
-        // helpers when they log off.
-        if (!extras.isEmpty()) {
-            for (Map.Entry<UUID, List<Companion>> en : extras.entrySet()) {
-                Player owner = Bukkit.getPlayer(en.getKey());
-                java.util.Iterator<Companion> it = en.getValue().iterator();
-                while (it.hasNext()) {
-                    Companion c = it.next();
-                    if (owner == null || !owner.isOnline()) { despawnCompanion(c); it.remove(); continue; }
-                    tickExtra(c, owner, tick);
-                }
-            }
+            // rest of this tick's companions.
+            getLogger().warning("(✧) companion tick failed for " + id + ": " + t);
         }
     }
 
@@ -2769,7 +2798,7 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
         Location dest = formationTarget(owner, c);
         if (nav.getWorld() != owner.getWorld()
                 || nav.getLocation().distance(owner.getLocation()) > FOLLOW_WARP_DISTANCE) {
-            nav.teleport(dest); // strayed / wrong world — snap back
+            nav.teleportAsync(dest); // strayed / wrong world — snap back
         } else {
             double speed = 1.1; // flat — leveling/speed-scaling was removed
             try { nav.getPathfinder().moveTo(dest, speed); } catch (Throwable ignored) {}
@@ -2783,10 +2812,20 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
     private void navMirrorTick() {
         // Fast early-return: nothing to mirror when there are no companions at all.
         if (companions.isEmpty() && extras.isEmpty()) return;
-        for (Companion c : companions.values()) navMirrorOne(c);
+        for (Companion c : companions.values()) navMirrorHop(c);
         for (List<Companion> list : extras.values()) {
-            for (Companion c : list) navMirrorOne(c);
+            for (Companion c : list) navMirrorHop(c);
         }
+    }
+
+    /** Folia: the navigator mob + NMS NPC share the owner's region, so hop the
+     *  mirror onto the owner's region thread. Falls through silently when the
+     *  owner is offline (the companion's about to be cleaned up anyway). */
+    private void navMirrorHop(Companion c) {
+        if (!c.navMirroring || c.navMob == null) return;
+        Player owner = Bukkit.getPlayer(c.owner);
+        if (owner == null || !owner.isOnline()) return;
+        owner.getScheduler().run(this, schedTask -> navMirrorOne(c), null);
     }
 
     private void navMirrorOne(Companion c) {
@@ -2817,7 +2856,7 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
         try { c.navMob.getPathfinder().stopPathfinding(); } catch (Throwable ignored) {}
         Location el = c.entity.getLocation();
         if (c.navMob.getWorld() != el.getWorld() || c.navMob.getLocation().distanceSquared(el) > 4.0) {
-            c.navMob.teleport(el);
+            c.navMob.teleportAsync(el);
         }
     }
 
@@ -4200,7 +4239,7 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
         }
         final String contextSnapshot = ctx;
 
-        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+        Bukkit.getAsyncScheduler().runNow(this, task -> {
             String reply;
             try {
                 reply = callDeepSeek(key, c, contextSnapshot);
@@ -4209,7 +4248,8 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
                 reply = null;
             }
             final String finalReply = reply;
-            Bukkit.getScheduler().runTask(this, () -> deliverReply(p, c, finalReply));
+            // deliverReply touches the player — hop back onto the player's region thread.
+            p.getScheduler().run(this, t -> deliverReply(p, c, finalReply), null);
         });
     }
 
@@ -4274,7 +4314,7 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
         String raw = e.getMessage();
         if (raw == null || raw.isBlank()) return;
         if (!raw.toLowerCase(Locale.ROOT).contains(c.name.toLowerCase(Locale.ROOT))) return;
-        Bukkit.getScheduler().runTask(this, () -> doSay(p, raw));
+        p.getScheduler().run(this, t -> doSay(p, raw), null);
     }
 
     /**
@@ -4853,7 +4893,7 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
         // Re-teleport once the destination is settled. Re-fetch the companion
         // each time in case it was dismissed in between.
         for (int delay : new int[] { 2, 10, 20 }) {
-            Bukkit.getScheduler().runTaskLater(this, () -> {
+            p.getScheduler().runDelayed(this, t -> {
                 Player owner = Bukkit.getPlayer(p.getUniqueId());
                 Companion cc = companions.get(p.getUniqueId());
                 if (owner == null || !owner.isOnline() || cc == null || cc.entity == null) return;
@@ -4861,7 +4901,7 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
                     cc.entity.teleport(spawnLocFor(owner));
                     updateHitbox(cc);
                 }
-            }, delay);
+            }, null, Math.max(1, delay));
         }
     }
 
@@ -4935,7 +4975,7 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
     private void saveMemory(Companion c) {
         if (c == null) return;
         MemorySnapshot snap = snapshotMemory(c);
-        Bukkit.getScheduler().runTaskAsynchronously(this, () -> writeMemory(snap));
+        Bukkit.getAsyncScheduler().runNow(this, t -> writeMemory(snap));
     }
 
     /** Synchronous variant for {@link #onDisable} (scheduler is shutting down). */
@@ -6253,14 +6293,14 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
             spawnHitbox(c, loc);
         } else {
             // Bukkit's teleport on Interaction is cheap (no movement physics).
-            hb.teleport(loc);
+            hb.teleportAsync(loc);
         }
 
         // Keep the chat bubble glued just above her head if one's active.
         if (c.bubbleId != null) {
             Entity bubble = Bukkit.getEntity(c.bubbleId);
             if (bubble != null && bubble.isValid()) {
-                bubble.teleport(loc.clone().add(0, 2.4, 0));
+                bubble.teleportAsync(loc.clone().add(0, 2.4, 0));
             } else {
                 c.bubbleId = null;
                 c.bubbleClearTick = 0;
@@ -6333,7 +6373,7 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
                     // Fallback for builds where setText(String) was removed.
                     getLogger().fine("setText fallback: " + t.getMessage());
                 }
-                td.teleport(bubbleLoc);
+                td.teleportAsync(bubbleLoc);
                 c.bubbleClearTick = behaviorTickCount + chatBubbleDurationTicks;
             }
         }
@@ -7309,7 +7349,7 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
                         && el.getY() < owner.getLocation().getY() - 4
                         && noGroundBelow(el, 8);
                 if (belowWorld || fellOff) {
-                    e.teleport(spawnLocFor(owner));
+                    e.teleportAsync(spawnLocFor(owner));
                     try { e.setFallDistance(0f); } catch (Throwable ignored) {}
                 }
             }
@@ -7400,11 +7440,11 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
             World ow = owner.getWorld();
             Location eloc = e.getLocation();
             if (e.getWorld() != ow) {
-                e.teleport(spawnLocFor(owner));
+                e.teleportAsync(spawnLocFor(owner));
             } else {
                 double dist = eloc.distance(owner.getLocation());
                 if (dist > teleportThreshold) {
-                    e.teleport(spawnLocFor(owner));
+                    e.teleportAsync(spawnLocFor(owner));
                 } else if (!engaged && dist > followDistance + 1.0) {
                     // Glide toward the owner. For a Mob we set a path target
                     // first (smooth), but flyers + slow mobs benefit from a
@@ -7420,7 +7460,7 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
                         Location glide = eloc.clone().add(
                                 near.toVector().subtract(eloc.toVector()).normalize().multiply(2.0));
                         glide.setDirection(near.toVector().subtract(eloc.toVector()));
-                        e.teleport(glide);
+                        e.teleportAsync(glide);
                         c.realFollowLastTick = tick;
                     }
                 }
@@ -7725,7 +7765,7 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
                     // Enderman style: blink to the target, then slash.
                     if (dist > 2.6) {
                         spawnFormParticle(w, self.getLocation().add(0, 1.0, 0), "PORTAL", 20);
-                        self.teleport(target.getLocation().add(
+                        self.teleportAsync(target.getLocation().add(
                                 target.getLocation().getDirection().multiply(-1.2)));
                         playFormSound(self, "entity.enderman.teleport", 0.8f, 1.0f);
                     }
@@ -8130,14 +8170,16 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
         // Animate the shimmer border while the GUI is open. The task
         // self-cancels once the player closes it (no longer a viewer).
         final UUID viewer = p.getUniqueId();
-        Bukkit.getScheduler().runTaskTimer(this, task -> {
+        // GUI animation touches the viewing player's open inventory — run it on
+        // that player's own region thread.
+        p.getScheduler().runAtFixedRate(this, task -> {
             if (!skinsGuiViewers.containsKey(viewer)) { task.cancel(); return; }
             Player pl = Bukkit.getPlayer(viewer);
             if (pl == null || !pl.isOnline()) { task.cancel(); return; }
             Inventory top = pl.getOpenInventory().getTopInventory();
             if (top == null || top.getSize() != 54) { task.cancel(); return; }
             decorateShimmerBorder(top, behaviorTickCount);
-        }, 6L, 6L);
+        }, null, 6L, 6L);
     }
 
     /** Players currently viewing the skins GUI \u2192 companion owner UUID. */
@@ -8236,7 +8278,7 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
         if (mat == Material.ARROW) {
             int page = skinsGuiPage.getOrDefault(p.getUniqueId(), 0);
             int next = label.contains("previous") ? page - 1 : page + 1;
-            Bukkit.getScheduler().runTask(this, () -> openSkinsGui(p, c, next));
+            p.getScheduler().run(this, t -> openSkinsGui(p, c, next), null);
             return;
         }
         if (mat == Material.BOOK) return;
@@ -8405,12 +8447,17 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
             if (!c.mounted || !c.realEntity) continue;
             Player owner = Bukkit.getPlayer(c.owner);
             if (owner == null || !owner.isOnline()) continue;
-            Entity e = liveRealEntity(c);
-            if (e == null) { c.mounted = false; continue; }
-            boolean riding;
-            try { riding = e.getPassengers().contains(owner); } catch (Throwable t) { riding = true; }
-            if (!riding) { endRide(c, e); continue; }
-            try { tickRideControl(c, e, owner); } catch (Throwable ignored) {}
+            // Folia: the ridden entity shares the owner's region — hop its
+            // velocity/rotation mutation onto the owner's region thread.
+            owner.getScheduler().run(this, schedTask -> {
+                if (!c.mounted || !c.realEntity || !owner.isOnline()) return;
+                Entity e = liveRealEntity(c);
+                if (e == null) { c.mounted = false; return; }
+                boolean riding;
+                try { riding = e.getPassengers().contains(owner); } catch (Throwable t) { riding = true; }
+                if (!riding) { endRide(c, e); return; }
+                try { tickRideControl(c, e, owner); } catch (Throwable ignored) {}
+            }, null);
         }
     }
 
@@ -8461,14 +8508,14 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
         if (c == null || !c.realEntity) return;
         endRide(c, liveRealEntity(c)); // also restores gravity/AI if she was being ridden
         for (int delay : new int[] { 2, 10, 20 }) {
-            Bukkit.getScheduler().runTaskLater(this, () -> {
+            e.getPlayer().getScheduler().runDelayed(this, t -> {
                 Player owner = Bukkit.getPlayer(e.getPlayer().getUniqueId());
                 Companion cc = companions.get(e.getPlayer().getUniqueId());
                 if (owner == null || !owner.isOnline() || cc == null || !cc.realEntity) return;
                 Entity re = liveRealEntity(cc);
                 if (re == null) { spawnRealEntity(owner, cc); return; }
-                if (re.getWorld() != owner.getWorld()) re.teleport(spawnLocFor(owner));
-            }, delay);
+                if (re.getWorld() != owner.getWorld()) re.teleportAsync(spawnLocFor(owner));
+            }, null, Math.max(1, delay));
         }
     }
 }

@@ -77,12 +77,15 @@ public final class HerobrinePlugin extends org.bukkit.plugin.java.JavaPlugin imp
 
         // behaviour tick — every 2 game ticks (10 Hz) so Herobrine moves/looks
         // smoothly; heavy per-player work inside is gated to ~1 Hz.
-        getServer().getScheduler().runTaskTimer(this, this::tick, 2L, 2L);
+        // Folia-safe: a global-region driver reads server/world state and the
+        // online-player collection; per-player mutation hops to each player's
+        // entity scheduler (see tick()).
+        getServer().getGlobalRegionScheduler().runAtFixedRate(this, task -> tick(), 2L, 2L);
         // structure generation tick — its own slower cadence
-        getServer().getScheduler().runTaskTimer(this, this::structureTick,
-                cfg.structureInterval(), cfg.structureInterval());
+        getServer().getGlobalRegionScheduler().runAtFixedRate(this, task -> structureTick(),
+                Math.max(1L, cfg.structureInterval()), Math.max(1L, cfg.structureInterval()));
         // packet NPC re-send tick — keeps the stalker visible to players moving into range
-        getServer().getScheduler().runTaskTimer(this, this::resendTick, 40L, 40L);
+        getServer().getGlobalRegionScheduler().runAtFixedRate(this, task -> resendTick(), 40L, 40L);
 
         getLogger().info("Herobrine is watching. (" + getServer().getOnlinePlayers().size() + " online)");
     }
@@ -92,6 +95,8 @@ public final class HerobrinePlugin extends org.bukkit.plugin.java.JavaPlugin imp
         if (boss != null && boss.isActive()) boss.stop(false);
         if (herobrine != null) herobrine.despawn();
         if (threats != null) threats.save();
+        getServer().getGlobalRegionScheduler().cancelTasks(this);
+        getServer().getAsyncScheduler().cancelTasks(this);
         getLogger().info("Herobrine fades away.");
     }
 
@@ -108,13 +113,18 @@ public final class HerobrinePlugin extends org.bukkit.plugin.java.JavaPlugin imp
         // ---- Heavy per-player work: only ~once per second ----
         if (now % 20 != 0) return;
 
+        final boolean escalate = now % 200 == 0; // escalation check every 10s
         for (Player p : getServer().getOnlinePlayers()) {
             if (p.getGameMode() == GameMode.CREATIVE || p.getGameMode() == GameMode.SPECTATOR) continue;
-            threats.updateDistance(p);
-            trackUnderground(p);
-            trackIsolation(p);
-            if (now % 200 == 0) encounters.evaluate(p); // escalation check every 10s
-            applyEnvironment(p);
+            // Per-player work touches the player + the blocks around them, so it
+            // must run on that player's region thread (Folia-safe).
+            p.getScheduler().run(this, t -> {
+                threats.updateDistance(p);
+                trackUnderground(p);
+                trackIsolation(p);
+                if (escalate) encounters.evaluate(p);
+                applyEnvironment(p);
+            }, null);
         }
 
         if (now - lastDecayTick >= 1200) { // ~1 minute
@@ -131,14 +141,18 @@ public final class HerobrinePlugin extends org.bukkit.plugin.java.JavaPlugin imp
         if (!cfg.structuresEnabled()) return;
         for (Player p : getServer().getOnlinePlayers()) {
             if (p.getGameMode() == GameMode.CREATIVE || p.getGameMode() == GameMode.SPECTATOR) continue;
-            String built = structures.maybeGenerate(p, threats.getThreat(p));
-            if (built != null) log("Built a " + built + " near " + p.getName());
+            // Generates blocks around the player -> run on the player's region thread.
+            p.getScheduler().run(this, t -> {
+                String built = structures.maybeGenerate(p, threats.getThreat(p));
+                if (built != null) log("Built a " + built + " near " + p.getName());
+            }, null);
         }
     }
 
     private void resendTick() {
         for (Player p : getServer().getOnlinePlayers()) {
-            herobrine.resendIfNear(p);
+            // Reads the player's location + sends packets to them -> player region thread.
+            p.getScheduler().run(this, t -> herobrine.resendIfNear(p), null);
         }
     }
 
@@ -272,7 +286,9 @@ public final class HerobrinePlugin extends org.bukkit.plugin.java.JavaPlugin imp
 
     @EventHandler
     public void onJoin(PlayerJoinEvent e) {
-        getServer().getScheduler().runTaskLater(this, () -> herobrine.resendIfNear(e.getPlayer()), 20L);
+        Player p = e.getPlayer();
+        // Touches the joining player -> their entity scheduler (Folia-safe).
+        p.getScheduler().runDelayed(this, t -> herobrine.resendIfNear(p), null, 20L);
     }
 
     @EventHandler

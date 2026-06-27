@@ -2,6 +2,7 @@ name: KawaiiFurnace
 version: ${project.version}
 main: com.ferisooo.kawaiifurnace.KawaiiFurnace
 api-version: '1.21'
+folia-supported: true
 author: Ferris
 description: Speeds up furnaces, blast furnaces and smokers, with optional fuel efficiency.
 load: POSTWORLD

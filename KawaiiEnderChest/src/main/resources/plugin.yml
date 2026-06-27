@@ -2,6 +2,7 @@ name: KawaiiEnderChest
 version: ${project.version}
 main: com.ferisooo.kawaiienderchest.KawaiiEnderChest
 api-version: '1.21'
+folia-supported: true
 author: Ferris
 description: Bigger ender chest — 54 slots (two chests combined), per-player and saved to disk.
 load: POSTWORLD

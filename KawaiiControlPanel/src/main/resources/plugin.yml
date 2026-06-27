@@ -2,6 +2,7 @@ name: KawaiiControlPanel
 version: ${project.version}
 main: com.ferisooo.kawaiicontrolpanel.KawaiiControlPanel
 api-version: '1.21'
+folia-supported: true
 author: Ferris
 description: In-game chest-GUI control panel to configure every Kawaii plugin live.
 

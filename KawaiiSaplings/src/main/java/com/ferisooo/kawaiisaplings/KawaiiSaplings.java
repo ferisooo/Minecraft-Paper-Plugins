@@ -17,7 +17,7 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.scheduler.BukkitTask;
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -28,6 +28,7 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
 
 /**
@@ -73,8 +74,11 @@ public final class KawaiiSaplings extends JavaPlugin implements Listener {
 
     private final Random random = new Random();
 
-    /** Positions of saplings we know about, awaiting their turn to grow. */
-    private final Set<BlockPos> tracked = new HashSet<>();
+    /** Positions of saplings we know about, awaiting their turn to grow.
+     *  On Folia this set is touched from several region threads (the grow
+     *  driver, per-region grow tasks, the async chunk-scan completion), so it
+     *  must be concurrent. */
+    private final Set<BlockPos> tracked = ConcurrentHashMap.newKeySet();
 
     // Resolved config / mappings.
     private final Map<Material, TreeType> saplingTree = new HashMap<>();
@@ -90,7 +94,7 @@ public final class KawaiiSaplings extends JavaPlugin implements Listener {
     private Set<String> enabledWorlds = new HashSet<>();
     private Set<String> disabledWorlds = new HashSet<>();
 
-    private BukkitTask growTask;
+    private ScheduledTask growTask;
 
     @Override
     public void onEnable() {
@@ -108,6 +112,8 @@ public final class KawaiiSaplings extends JavaPlugin implements Listener {
             growTask.cancel();
             growTask = null;
         }
+        Bukkit.getGlobalRegionScheduler().cancelTasks(this);
+        Bukkit.getAsyncScheduler().cancelTasks(this);
         tracked.clear();
     }
 
@@ -153,7 +159,12 @@ public final class KawaiiSaplings extends JavaPlugin implements Listener {
 
     private void startGrowTask() {
         if (growTask != null) growTask.cancel();
-        growTask = getServer().getScheduler().runTaskTimer(this, this::growCycle, intervalTicks, intervalTicks);
+        // Folia-safe: a global-region repeating driver only READS the tracked
+        // collection and picks a bounded batch; the actual block/world mutation
+        // for each sapling is hopped onto the RegionScheduler for that block's
+        // own location (block edits must run on that region's thread).
+        growTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(this,
+                task -> growCycle(), Math.max(1L, intervalTicks), Math.max(1L, intervalTicks));
     }
 
     // ------------------------------------------------------------------ events
@@ -190,7 +201,10 @@ public final class KawaiiSaplings extends JavaPlugin implements Listener {
         final int baseZ = chunk.getZ() << 4;
         // Capture the managed materials on the main thread so the async loop never reads the live map.
         final Set<Material> types = new HashSet<>(saplingTree.keySet());
-        getServer().getScheduler().runTaskAsynchronously(this, () -> {
+        // Folia-safe: scan the immutable snapshot off-thread on the async
+        // scheduler. The result is merged straight into the concurrent tracked
+        // set — that's a plain collection mutation, no world/block access.
+        Bukkit.getAsyncScheduler().runNow(this, task -> {
             List<BlockPos> found = new ArrayList<>();
             for (int x = 0; x < 16; x++) {
                 for (int z = 0; z < 16; z++) {
@@ -203,7 +217,7 @@ public final class KawaiiSaplings extends JavaPlugin implements Listener {
                 }
             }
             if (found.isEmpty()) return;
-            getServer().getScheduler().runTask(this, () -> tracked.addAll(found));
+            tracked.addAll(found);
         });
     }
 
@@ -212,20 +226,35 @@ public final class KawaiiSaplings extends JavaPlugin implements Listener {
     private void growCycle() {
         if (tracked.isEmpty()) return;
         int budget = maxPerCycle;
-        // Iterate a snapshot so we can mutate `tracked` while looping.
+        // The driver runs on the global-region thread, which may only READ the
+        // tracked collection and resolve the World handle — it must NOT touch
+        // blocks. For each candidate within budget we remove it from the queue
+        // and hop the actual block check + growth onto the RegionScheduler for
+        // that block's location, which runs on the owning region's thread.
         for (BlockPos pos : new ArrayList<>(tracked)) {
             if (budget <= 0) break;
             World world = Bukkit.getWorld(pos.world());
             if (world == null) { tracked.remove(pos); continue; }
-            if (!world.isChunkLoaded(pos.x() >> 4, pos.z() >> 4)) continue; // try again when loaded
             tracked.remove(pos);
-            Block block = world.getBlockAt(pos.x(), pos.y(), pos.z());
-            TreeType type = saplingTree.get(block.getType());
-            if (type == null) continue; // no longer a managed sapling
-            if (!singleMega && isMegaOnly(block.getType())) continue; // respect vanilla 2x2 rule
             budget--;
-            forceGrow(block, type);
+            Location loc = new Location(world, pos.x(), pos.y(), pos.z());
+            Bukkit.getRegionScheduler().execute(this, loc, () -> growAt(world, pos));
         }
+    }
+
+    /** Runs on the region thread that owns this position: verify the block is
+     *  still a managed sapling whose chunk is loaded, then force it to grow. */
+    private void growAt(World world, BlockPos pos) {
+        if (!world.isChunkLoaded(pos.x() >> 4, pos.z() >> 4)) {
+            // Chunk no longer loaded — requeue and try again on a later cycle.
+            tracked.add(pos);
+            return;
+        }
+        Block block = world.getBlockAt(pos.x(), pos.y(), pos.z());
+        TreeType type = saplingTree.get(block.getType());
+        if (type == null) return; // no longer a managed sapling
+        if (!singleMega && isMegaOnly(block.getType())) return; // respect vanilla 2x2 rule
+        forceGrow(block, type);
     }
 
     /** Forces one sapling to become a tree, carving room first if needed. */

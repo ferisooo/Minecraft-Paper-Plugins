@@ -143,7 +143,7 @@ public final class IslandManager {
         if (!dirty) return;
         dirty = false;
         final String yaml = data.saveToString(); // snapshot on the main thread
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> writeYaml(yaml));
+        Bukkit.getAsyncScheduler().runNow(plugin, t -> writeYaml(yaml));
     }
 
     /**

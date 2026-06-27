@@ -16,7 +16,6 @@ import org.bukkit.event.block.BlockDamageEvent;
 import org.bukkit.event.player.PlayerAnimationEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -83,15 +82,20 @@ public final class KawaiiBlockHP extends JavaPlugin implements Listener {
         getServer().getPluginManager().registerEvents(this, this);
 
         // Drive every active dig session once per tick.
-        new BukkitRunnable() {
-            @Override public void run() { tickAll(); }
-        }.runTaskTimer(this, 1L, 1L);
+        // Folia-safe: a global-region repeating driver reads the shared sessions
+        // map (and prunes dead/finished ones), then hops each player's per-tick
+        // work — reading the block's break speed and sending the action bar, both
+        // of which touch the player's region — onto THAT player's entity
+        // scheduler. Works identically on Paper/Purpur and Folia.
+        Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, task -> tickAll(), 1L, 1L);
 
         getLogger().info("KawaiiBlockHP enabled - block HP bars show above the hotbar.");
     }
 
     @Override
     public void onDisable() {
+        Bukkit.getGlobalRegionScheduler().cancelTasks(this);
+        Bukkit.getAsyncScheduler().cancelTasks(this);
         sessions.clear();
     }
 
@@ -171,6 +175,7 @@ public final class KawaiiBlockHP extends JavaPlugin implements Listener {
 
     private void tickAll() {
         tickClock++;
+        long clock = tickClock;
         Iterator<Map.Entry<UUID, Session>> it = sessions.entrySet().iterator();
         while (it.hasNext()) {
             Map.Entry<UUID, Session> en = it.next();
@@ -191,27 +196,40 @@ public final class KawaiiBlockHP extends JavaPlugin implements Listener {
                 continue;
             }
 
-            Block b = s.block.getBlock();
-            double speed = safeBreakSpeed(b, p);
-            boolean swinging = (tickClock - lastSwing.getOrDefault(id, -999L)) <= SWING_GRACE;
-            // Only advance while she's actually mining (recent arm-swing) and
-            // not already at full progress. Otherwise count toward expiry —
-            // this kills both the "drains while not hitting" and the
-            // "stuck at 0%" bugs (which came from idleTicks resetting forever
-            // once progress saturated but the block never actually broke).
-            if (speed > 0.0 && swinging && s.progress < 1.0) {
-                s.progress = Math.min(1.0, s.progress + speed);
-                s.idleTicks = 0;
-            } else {
-                s.idleTicks++;
-            }
-
-            if (s.idleTicks >= lingerTicks) {
-                it.remove();
-                continue;
-            }
-            render(p, s);
+            // Hop the per-player work onto the player's own region thread: it
+            // reads the mined block's break speed and sends the action bar, both
+            // of which must happen on the player's region. Expiry/removal from
+            // the shared map is deferred back to the driver via the broke flag /
+            // idleTicks so the map is only mutated from this single driver thread.
+            p.getScheduler().run(this, t -> tickSession(p, s, clock), null);
         }
+    }
+
+    /** Per-player dig tick, run on the player's own region thread. */
+    private void tickSession(Player p, Session s, long clock) {
+        if (s.block == null || s.broke) return;
+        Block b = s.block.getBlock();
+        double speed = safeBreakSpeed(b, p);
+        boolean swinging = (clock - lastSwing.getOrDefault(p.getUniqueId(), -999L)) <= SWING_GRACE;
+        // Only advance while she's actually mining (recent arm-swing) and
+        // not already at full progress. Otherwise count toward expiry —
+        // this kills both the "drains while not hitting" and the
+        // "stuck at 0%" bugs (which came from idleTicks resetting forever
+        // once progress saturated but the block never actually broke).
+        if (speed > 0.0 && swinging && s.progress < 1.0) {
+            s.progress = Math.min(1.0, s.progress + speed);
+            s.idleTicks = 0;
+        } else {
+            s.idleTicks++;
+        }
+
+        if (s.idleTicks >= lingerTicks) {
+            // Mark for removal; the driver prunes it next tick. Setting broke
+            // makes the driver's "already broke" branch drop it cleanly.
+            s.broke = true;
+            return;
+        }
+        render(p, s);
     }
 
     /** Treat any arm-swing as a "still mining" heartbeat for the dig tracker. */

@@ -21,7 +21,7 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.scheduler.BukkitTask;
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
@@ -72,8 +72,8 @@ public final class KawaiiScoreboard extends JavaPlugin implements Listener {
     private final Map<UUID, Long> lastSample = new HashMap<>();
     private File playtimeFile;
 
-    private BukkitTask tickTask;
-    private BukkitTask saveTask;
+    private ScheduledTask tickTask;
+    private ScheduledTask saveTask;
     private long    updateTicks;
     private boolean showOnJoin;
     private boolean showCoords;
@@ -111,6 +111,8 @@ public final class KawaiiScoreboard extends JavaPlugin implements Listener {
     public void onDisable() {
         if (tickTask != null) tickTask.cancel();
         if (saveTask != null) saveTask.cancel();
+        Bukkit.getGlobalRegionScheduler().cancelTasks(this);
+        Bukkit.getAsyncScheduler().cancelTasks(this);
         // Flush any pending playtime for everyone still online, then persist.
         for (Player p : Bukkit.getOnlinePlayers()) accrue(p, p.getWorld().getName());
         savePlaytime();
@@ -147,12 +149,18 @@ public final class KawaiiScoreboard extends JavaPlugin implements Listener {
 
     private void scheduleTickTask() {
         if (tickTask != null) tickTask.cancel();
-        tickTask = Bukkit.getScheduler().runTaskTimer(this,
-                this::tickAll, updateTicks, updateTicks);
+        // Folia-safe: a global-region repeating driver does the shared per-cycle
+        // work (title frame, leftover-objective sweep, building the gradient
+        // title) and reads the online-player collection, then hops each player's
+        // own work onto THAT player's entity scheduler — scoreboard/location
+        // touches must only happen on the player's region thread.
+        tickTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(this,
+                task -> tickAll(), Math.max(1L, updateTicks), Math.max(1L, updateTicks));
         // Periodic autosave (every 60s) so a crash doesn't lose much progress.
+        // Reads global state and writes a file — global-region scheduler.
         if (saveTask != null) saveTask.cancel();
-        saveTask = Bukkit.getScheduler().runTaskTimer(this,
-                this::savePlaytime, 20L * 60L, 20L * 60L);
+        saveTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(this,
+                task -> savePlaytime(), 20L * 60L, 20L * 60L);
     }
 
     private void tickAll() {
@@ -167,27 +175,33 @@ public final class KawaiiScoreboard extends JavaPlugin implements Listener {
         // character) once per player.
         Component frameTitle = animatedTitle ? gradientTitle(titleText, titleFrame) : null;
         for (Player p : Bukkit.getOnlinePlayers()) {
-            // Accrue playtime for everyone online, even if their sidebar is
-            // hidden, so the per-world totals stay accurate.
-            accrue(p, p.getWorld().getName());
-            PlayerBoard b = boards.get(p.getUniqueId());
-            if (b == null) {
-                // Self-heal: a player who should have the sidebar but doesn't
-                // (e.g. another plugin reset their scoreboard, or attach was
-                // missed) gets it (re)attached. Respects the per-player toggle.
-                if (showOnJoin && !suppressed.contains(p.getUniqueId())) attach(p);
-                continue;
-            }
-            // The quest row appears/disappears as the player's quest state
-            // changes, so the row count can shift — rebuild when it does.
-            if (b.rowCount() != rowsFor(p)) {
-                attach(p);
-            } else {
-                // Re-assert our board if something swapped the player back to
-                // the main scoreboard (which is what hid the sidebar).
-                if (p.getScoreboard() != b.scoreboard()) b.show();
-                refresh(p, b, frameTitle);
-            }
+            // Each player's work touches that player (scoreboard, location,
+            // playtime sample) — hop it onto the player's own region thread.
+            p.getScheduler().run(this, t -> tickPlayer(p, frameTitle), null);
+        }
+    }
+
+    private void tickPlayer(Player p, Component frameTitle) {
+        // Accrue playtime for everyone online, even if their sidebar is
+        // hidden, so the per-world totals stay accurate.
+        accrue(p, p.getWorld().getName());
+        PlayerBoard b = boards.get(p.getUniqueId());
+        if (b == null) {
+            // Self-heal: a player who should have the sidebar but doesn't
+            // (e.g. another plugin reset their scoreboard, or attach was
+            // missed) gets it (re)attached. Respects the per-player toggle.
+            if (showOnJoin && !suppressed.contains(p.getUniqueId())) attach(p);
+            return;
+        }
+        // The quest row appears/disappears as the player's quest state
+        // changes, so the row count can shift — rebuild when it does.
+        if (b.rowCount() != rowsFor(p)) {
+            attach(p);
+        } else {
+            // Re-assert our board if something swapped the player back to
+            // the main scoreboard (which is what hid the sidebar).
+            if (p.getScoreboard() != b.scoreboard()) b.show();
+            refresh(p, b, frameTitle);
         }
     }
 
@@ -309,7 +323,7 @@ public final class KawaiiScoreboard extends JavaPlugin implements Listener {
         if (playtimeFile == null) return;
         final Map<UUID, Map<String, Long>> snapshot = snapshotPlaytime();
         try {
-            Bukkit.getScheduler().runTaskAsynchronously(this, () -> writeSnapshot(snapshot));
+            Bukkit.getAsyncScheduler().runNow(this, t -> writeSnapshot(snapshot));
         } catch (IllegalStateException ex) {
             // Scheduler refuses new async tasks during shutdown — write inline so
             // we never drop the data.

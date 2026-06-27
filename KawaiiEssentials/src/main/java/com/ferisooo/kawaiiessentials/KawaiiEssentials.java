@@ -132,9 +132,13 @@ public final class KawaiiEssentials extends JavaPlugin implements Listener {
         buildShimmerPanes();
         getServer().getPluginManager().registerEvents(this, this);
         // Shimmer-animate any open KawaiiEssentials menu every 4 ticks.
-        Bukkit.getScheduler().runTaskTimer(this, this::animateMenus, 4L, 4L);
-        // Debounced disk flush: serialise on the main thread, write off-thread.
-        Bukkit.getScheduler().runTaskTimer(this, this::flushDirtyStores, 100L, 100L);
+        // Folia-safe: a global-region repeating driver reads the open-menu set,
+        // then hops each player's inventory mutation onto THAT player's entity
+        // scheduler (an open inventory must only be touched on the player's
+        // region thread).
+        Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, task -> animateMenus(), 4L, 4L);
+        // Debounced disk flush: serialise (global state) then write off-thread.
+        Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, task -> flushDirtyStores(), 100L, 100L);
         getLogger().info("(✧) KawaiiEssentials ready ~ homes, tpa, hub, back, kit & trash!");
     }
 
@@ -234,7 +238,7 @@ public final class KawaiiEssentials extends JavaPlugin implements Listener {
 
     /** Write the already-serialised YAML text to {@code file} off the main thread. */
     private void writeAsync(String yaml, File file, String label) {
-        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+        Bukkit.getAsyncScheduler().runNow(this, t -> {
             try {
                 java.nio.file.Files.write(file.toPath(),
                         yaml.getBytes(java.nio.charset.StandardCharsets.UTF_8));
@@ -362,11 +366,14 @@ public final class KawaiiEssentials extends JavaPlugin implements Listener {
         // Load the destination chunk asynchronously (no main-thread chunk gen).
         // Paper runs this callback back on the main thread, where teleporting and
         // playing the sound are safe.
-        world.getChunkAtAsync(dest).thenRun(() -> {
-            player.teleport(dest);
-            // version-safe sound: String overload only.
-            player.playSound(player.getLocation(), "minecraft:entity.enderman.teleport", 1f, 1f);
-        });
+        world.getChunkAtAsync(dest).thenRun(() ->
+            // teleportAsync is Folia-safe (handles cross-region/world hops). Chain
+            // the sound after the teleport completes, hopping onto the player's own
+            // region thread since playSound touches the player.
+            player.teleportAsync(dest).thenRun(() ->
+                player.getScheduler().run(this, t ->
+                    // version-safe sound: String overload only.
+                    player.playSound(player.getLocation(), "minecraft:entity.enderman.teleport", 1f, 1f), null)));
     }
 
     private void pickupSound(Player player) {
@@ -501,14 +508,18 @@ public final class KawaiiEssentials extends JavaPlugin implements Listener {
         // Nothing to animate if no one has an Essentials menu open.
         if (openMenuPlayers.isEmpty()) return;
         guiFrame++;
+        final int frame = guiFrame;
         for (UUID id : openMenuPlayers) {
             Player p = Bukkit.getPlayer(id);
             if (p == null) continue;
-            Inventory top = p.getOpenInventory().getTopInventory();
-            if (top != null && top.getHolder() instanceof MenuHolder) {
-                paintBorder(top, guiFrame);
-                p.updateInventory();
-            }
+            // Touch the player's open inventory on the player's own region thread.
+            p.getScheduler().run(this, t -> {
+                Inventory top = p.getOpenInventory().getTopInventory();
+                if (top != null && top.getHolder() instanceof MenuHolder) {
+                    paintBorder(top, frame);
+                    p.updateInventory();
+                }
+            }, null);
         }
     }
 
@@ -1302,8 +1313,9 @@ public final class KawaiiEssentials extends JavaPlugin implements Listener {
         event.setCancelled(true); // consume the line, don't broadcast it
         String input = event.getMessage().trim();
         Player p = event.getPlayer();
-        // Chat fires async — touch config + GUIs back on the main thread.
-        Bukkit.getScheduler().runTask(this, () -> applyWarpRename(p, oldName, input));
+        // Chat fires async — touch config + the player's GUI back on the player's
+        // own region thread (applyWarpRename reopens a menu for this player).
+        p.getScheduler().run(this, t -> applyWarpRename(p, oldName, input), null);
     }
 
     // ---- Back ----

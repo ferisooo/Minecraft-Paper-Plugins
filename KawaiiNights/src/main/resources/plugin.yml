@@ -2,6 +2,7 @@ name: KawaiiNights
 version: ${project.version}
 main: com.ferisooo.kawaiinights.KawaiiNights
 api-version: '1.21'
+folia-supported: true
 author: Ferris
 description: Extra hostile mobs spawn any time/weather/biome (more at night), and hostiles don't burn in daylight.
 

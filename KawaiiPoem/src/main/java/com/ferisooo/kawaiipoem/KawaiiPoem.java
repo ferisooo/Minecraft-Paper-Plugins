@@ -7,7 +7,7 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.scheduler.BukkitTask;
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
@@ -33,7 +33,7 @@ import java.util.UUID;
 public final class KawaiiPoem extends JavaPlugin {
 
     /** One running scroll task per viewer, so re-running / stopping is clean. */
-    private final Map<UUID, BukkitTask> playing = new HashMap<>();
+    private final Map<UUID, ScheduledTask> playing = new HashMap<>();
 
     @Override
     public void onEnable() {
@@ -43,7 +43,7 @@ public final class KawaiiPoem extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        for (BukkitTask t : playing.values()) t.cancel();
+        for (ScheduledTask t : playing.values()) t.cancel();
         playing.clear();
     }
 
@@ -141,28 +141,29 @@ public final class KawaiiPoem extends JavaPlugin {
         final long delay = Math.max(1L, getConfig().getLong("line-delay-ticks", 30));
         final UUID id = player.getUniqueId();
 
-        BukkitTask task = new org.bukkit.scheduler.BukkitRunnable() {
-            int index = 0;
-            @Override
-            public void run() {
-                Player p = Bukkit.getPlayer(id);
-                if (p == null || !p.isOnline()) { cancel(); playing.remove(id); return; }
-                if (index >= lines.size()) {
-                    cancel();
-                    playing.remove(id);
-                    return;
-                }
-                p.sendMessage(lines.get(index));
-                index++;
+        // Folia-safe: the poem is sent line-by-line to ONE specific player, so the
+        // repeating task runs on that player's own entity scheduler (the only
+        // thread allowed to touch the player on Folia). int[] holds the cursor
+        // across runs. Init delay 10, period 'delay' (both already >= 1).
+        final int[] index = {0};
+        ScheduledTask task = player.getScheduler().runAtFixedRate(this, t -> {
+            Player p = Bukkit.getPlayer(id);
+            if (p == null || !p.isOnline()) { t.cancel(); playing.remove(id); return; }
+            if (index[0] >= lines.size()) {
+                t.cancel();
+                playing.remove(id);
+                return;
             }
-        }.runTaskTimer(this, 10L, delay);
+            p.sendMessage(lines.get(index[0]));
+            index[0]++;
+        }, null, 10L, delay);
 
         playing.put(id, task);
     }
 
     /** Stop a player's poem if one is running. */
     public void stop(UUID id) {
-        BukkitTask t = playing.remove(id);
+        ScheduledTask t = playing.remove(id);
         if (t != null) t.cancel();
     }
 

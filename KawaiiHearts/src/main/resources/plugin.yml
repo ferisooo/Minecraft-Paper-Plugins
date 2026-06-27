@@ -2,6 +2,7 @@ name: KawaiiHearts
 version: ${project.version}
 main: com.ferisooo.kawaiihearts.KawaiiHearts
 api-version: '1.21'
+folia-supported: true
 author: Ferris
 description: Floats a cute pink health bar above every mob's head. ✿
 

@@ -8,7 +8,7 @@ import org.bukkit.entity.WitherSkeleton;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
-import org.bukkit.scheduler.BukkitRunnable;
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 
 /**
  * A Wither Skeleton re-skinned by attributes into one of Herobrine's "shadow
@@ -20,7 +20,7 @@ public final class ShadowMinion {
 
     private final HerobrinePlugin plugin;
     private final WitherSkeleton entity;
-    private BukkitRunnable particleTask;
+    private ScheduledTask particleTask;
 
     private ShadowMinion(HerobrinePlugin plugin, WitherSkeleton entity) {
         this.plugin = plugin;
@@ -48,7 +48,9 @@ public final class ShadowMinion {
 
         ShadowMinion minion = new ShadowMinion(plugin, ws);
         minion.startEffects();
-        plugin.getServer().getScheduler().runTaskLater(plugin, minion::expire, lifespanSeconds * 20L);
+        // Expiry removes this specific entity -> route to its own entity scheduler.
+        ws.getScheduler().runDelayed(plugin, t -> minion.expire(), null,
+                Math.max(1L, lifespanSeconds * 20L));
         return minion;
     }
 
@@ -59,15 +61,14 @@ public final class ShadowMinion {
     }
 
     private void startEffects() {
-        particleTask = new BukkitRunnable() {
-            @Override public void run() {
-                if (entity.isDead() || !entity.isValid()) { cancel(); return; }
-                Location l = entity.getLocation().add(0, 1, 0);
-                l.getWorld().spawnParticle(Particle.SMOKE, l, 6, 0.25, 0.4, 0.25, 0.01);
-                l.getWorld().spawnParticle(Particle.LARGE_SMOKE, l, 2, 0.2, 0.3, 0.2, 0.0);
-            }
-        };
-        particleTask.runTaskTimer(plugin, 0L, 10L);
+        // Reads/touches this specific entity's location every 10 ticks ->
+        // route to its own entity scheduler (Folia-safe). init must be >= 1.
+        particleTask = entity.getScheduler().runAtFixedRate(plugin, task -> {
+            if (entity.isDead() || !entity.isValid()) { task.cancel(); return; }
+            Location l = entity.getLocation().add(0, 1, 0);
+            l.getWorld().spawnParticle(Particle.SMOKE, l, 6, 0.25, 0.4, 0.25, 0.01);
+            l.getWorld().spawnParticle(Particle.LARGE_SMOKE, l, 2, 0.2, 0.3, 0.2, 0.0);
+        }, null, 1L, 10L);
     }
 
     public boolean isAlive() { return entity != null && entity.isValid() && !entity.isDead(); }

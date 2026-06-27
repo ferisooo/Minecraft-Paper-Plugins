@@ -134,7 +134,9 @@ public final class KawaiiDragon extends JavaPlugin implements Listener {
         if (!enabled) return;
         if (e.getEntity() instanceof EnderDragon d) {
             // Defer a tick so the entity's attributes are fully initialised.
-            Bukkit.getScheduler().runTaskLater(this, () -> { if (d.isValid()) scaleDragon(d); }, 1L);
+            // Folia-safe: scaling touches the dragon (health/PDC), so run it on
+            // the dragon's own entity-region thread.
+            d.getScheduler().runDelayed(this, t -> { if (d.isValid()) scaleDragon(d); }, null, Math.max(1L, 1L));
         }
     }
 

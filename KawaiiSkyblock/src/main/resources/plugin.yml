@@ -2,6 +2,7 @@ name: KawaiiSkyblock
 version: ${project.version}
 main: com.ferisooo.kawaiiskyblock.KawaiiSkyblock
 api-version: '1.21'
+folia-supported: true
 author: Ferris
 load: POSTWORLD
 

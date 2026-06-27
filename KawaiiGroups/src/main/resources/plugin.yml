@@ -2,6 +2,7 @@ name: KawaiiGroups
 version: ${project.version}
 main: com.ferisooo.kawaiigroups.KawaiiGroups
 api-version: '1.21'
+folia-supported: true
 author: Ferris
 description: Online-only player groups with roles, invites, GUIs, group chat and shared (multiplied) hearts.
 load: POSTWORLD

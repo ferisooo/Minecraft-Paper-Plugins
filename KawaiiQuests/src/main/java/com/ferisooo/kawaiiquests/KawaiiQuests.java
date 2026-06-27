@@ -99,13 +99,15 @@ public final class KawaiiQuests extends JavaPlugin implements TabCompleter {
         loadData();
         // Debounced persistence: mutations flag data dirty; this timer snapshots on the
         // main thread and writes bytes off-thread, instead of a sync write per mutation.
-        getServer().getScheduler().runTaskTimer(this, this::flushData,
+        getServer().getGlobalRegionScheduler().runAtFixedRate(this, task -> flushData(),
                 SAVE_INTERVAL_TICKS, SAVE_INTERVAL_TICKS);
         getLogger().info("(✧) KawaiiQuests enabled ~ /kquest to begin! ✿");
     }
 
     @Override
     public void onDisable() {
+        getServer().getGlobalRegionScheduler().cancelTasks(this);
+        getServer().getAsyncScheduler().cancelTasks(this);
         flushDataSync();                // persist ongoing quests across restarts
         questManager.clearAll();
         if (antiExploit != null) antiExploit.clearPlaced();
@@ -210,15 +212,20 @@ public final class KawaiiQuests extends JavaPlugin implements TabCompleter {
         crate.start();
         deepSeek.generate(diff, recentList(diff), recentTypeList(diff), quest -> {
             requesting.remove(id);
-            if (!p.isOnline()) return;
-            if (quest == null) {
-                // DeepSeek is required but unavailable/failed — abort, no fallback.
-                p.closeInventory(); // stop the spinning crate
-                p.sendMessage(msg("ai-failed"));
-                return;
-            }
-            assignQuest(p, quest);
-            crate.reveal(quest, () -> gui.open(p));
+            // The callback arrives on a global-region thread; everything below
+            // touches this specific player, so hop onto the player's entity
+            // scheduler to stay Folia-safe.
+            p.getScheduler().run(this, t -> {
+                if (!p.isOnline()) return;
+                if (quest == null) {
+                    // DeepSeek is required but unavailable/failed — abort, no fallback.
+                    p.closeInventory(); // stop the spinning crate
+                    p.sendMessage(msg("ai-failed"));
+                    return;
+                }
+                assignQuest(p, quest);
+                crate.reveal(quest, () -> gui.open(p));
+            }, null);
         });
     }
 
@@ -503,7 +510,7 @@ public final class KawaiiQuests extends JavaPlugin implements TabCompleter {
         if (!dataDirty) return;
         dataDirty = false;
         final String yaml = snapshotData().saveToString();
-        getServer().getScheduler().runTaskAsynchronously(this, () -> writeData(yaml));
+        getServer().getAsyncScheduler().runNow(this, task -> writeData(yaml));
     }
 
     /** Synchronous flush for shutdown: snapshot and write inline so no data is lost. */

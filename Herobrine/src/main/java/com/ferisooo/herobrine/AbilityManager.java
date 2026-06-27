@@ -128,8 +128,9 @@ public final class AbilityManager {
     private void placeTemp(Block b, Material mat) {
         final org.bukkit.block.data.BlockData orig = b.getBlockData();
         b.setType(mat, false);
-        long ticks = Math.max(1, cfg.blockRevertSeconds()) * 20L;
-        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+        long ticks = Math.max(1L, cfg.blockRevertSeconds() * 20L);
+        // Touches a specific block -> route to that block's region (Folia-safe).
+        org.bukkit.Bukkit.getRegionScheduler().runDelayed(plugin, b.getLocation(), t -> {
             if (b.getType() == mat) b.setBlockData(orig, false); // only revert if still ours
         }, ticks);
     }

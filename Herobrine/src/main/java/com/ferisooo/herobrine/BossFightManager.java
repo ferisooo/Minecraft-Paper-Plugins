@@ -6,7 +6,7 @@ import org.bukkit.boss.BarColor;
 import org.bukkit.boss.BarStyle;
 import org.bukkit.boss.BossBar;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitRunnable;
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -31,7 +31,8 @@ public final class BossFightManager {
 
     private HerobrineEntity boss;
     private BossBar bar;
-    private BukkitRunnable loop;
+    private ScheduledTask loop;
+    private int tick;
     private int phase;
     private final List<ShadowMinion> minions = new ArrayList<>();
     private boolean active;
@@ -68,31 +69,38 @@ public final class BossFightManager {
     }
 
     private void startLoop() {
-        loop = new BukkitRunnable() {
-            int tick = 0;
-            @Override public void run() {
-                if (!active || boss == null || boss.isDead()) { stop(false); return; }
-                Player target = boss.target();
-                if (target == null || !target.isOnline()) {
-                    // Target left — keep the boss & its progress, hand off to the
-                    // encounter manager to pick the next victim.
-                    Player next = plugin.encounters().nextBossTarget(target);
-                    if (next == null) { return; } // wait for someone to return
-                    boss.setTarget(next);
-                    bar.removeAll();
-                    bar.addPlayer(next);
-                    return;
-                }
-                if (target.getWorld() != boss.getLocation().getWorld()) {
-                    boss.teleport(target.getLocation().add(0, 0, 2));
-                }
-                updatePhase();
-                refreshBar(target);
-                runPhaseBehavior(target, tick);
-                tick++;
+        tick = 0;
+        // Folia-safe: a global-region driver every 10 ticks owns the boss-fight
+        // state (boss packet NPC, boss bar, phase/tick counters); all work that
+        // touches the target PLAYER hops onto that player's region thread.
+        // init must be >= 1.
+        loop = org.bukkit.Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, task -> {
+            if (!active || boss == null || boss.isDead()) { stop(false); return; }
+            Player target = boss.target();
+            if (target == null || !target.isOnline()) {
+                // Target left — keep the boss & its progress, hand off to the
+                // encounter manager to pick the next victim.
+                Player next = plugin.encounters().nextBossTarget(target);
+                if (next == null) { return; } // wait for someone to return
+                boss.setTarget(next);
+                bar.removeAll();
+                bar.addPlayer(next);
+                return;
             }
-        };
-        loop.runTaskTimer(plugin, 0L, 10L); // every half-second
+            if (target.getWorld() != boss.getLocation().getWorld()) {
+                boss.teleport(target.getLocation().add(0, 0, 2)); // packet NPC move
+            }
+            updatePhase();
+            final int curTick = tick;
+            // Phase behaviour damages/affects the target and the area around it.
+            target.getScheduler().run(plugin, t -> {
+                if (!active || boss == null || boss.isDead()) return;
+                if (!target.isOnline()) return;
+                refreshBar(target);
+                runPhaseBehavior(target, curTick);
+            }, null);
+            tick++;
+        }, 1L, 10L); // every half-second
     }
 
     private void updatePhase() {

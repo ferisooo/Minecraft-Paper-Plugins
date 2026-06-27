@@ -395,14 +395,20 @@ public final class BuildManager {
                 continue;
             }
             if (tick < job.nextActionTick) continue;
-            try {
-                if (job.isRevert) tickRevert(job);
-                else              tickBuild(job);
-            } catch (Throwable t) {
-                plugin.getLogger().warning("(✧) Build tick failed: " + t.getMessage());
-                job.complete = true;
-            }
             job.nextActionTick = tick + job.ticksPerStep;
+            // Folia: this step reads + places blocks in the world, so it must
+            // run on the region thread that owns the build origin. Hop there.
+            Location origin = job.origin;
+            if (origin == null || origin.getWorld() == null) { job.complete = true; continue; }
+            Bukkit.getRegionScheduler().execute(plugin, origin, () -> {
+                try {
+                    if (job.isRevert) tickRevert(job);
+                    else              tickBuild(job);
+                } catch (Throwable t) {
+                    plugin.getLogger().warning("(✧) Build tick failed: " + t.getMessage());
+                    job.complete = true;
+                }
+            });
         }
         if (finished != null) {
             for (UUID id : finished) finalizeJob(id);

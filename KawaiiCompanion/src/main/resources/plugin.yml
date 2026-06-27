@@ -2,6 +2,7 @@ name: KawaiiCompanion
 version: ${project.version}
 main: com.ferisooo.kawaiicompanion.KawaiiCompanion
 api-version: '1.21'
+folia-supported: true
 author: Ferris
 description: AI companion that follows you and chats via DeepSeek with configurable personality + memory.
 load: POSTWORLD

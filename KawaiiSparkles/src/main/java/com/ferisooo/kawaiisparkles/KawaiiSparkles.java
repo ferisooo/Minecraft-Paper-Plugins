@@ -31,7 +31,7 @@ import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.scheduler.BukkitTask;
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
@@ -172,7 +172,7 @@ public final class KawaiiSparkles extends JavaPlugin implements Listener {
     private ItemStack[] borderPaneCache;
 
     private long ticks;
-    private BukkitTask animator;
+    private ScheduledTask animator;
 
     @Override
     public void onEnable() {
@@ -186,6 +186,8 @@ public final class KawaiiSparkles extends JavaPlugin implements Listener {
     @Override
     public void onDisable() {
         if (animator != null) animator.cancel();
+        Bukkit.getGlobalRegionScheduler().cancelTasks(this);
+        Bukkit.getAsyncScheduler().cancelTasks(this);
     }
 
     // ====================================================================
@@ -569,24 +571,46 @@ public final class KawaiiSparkles extends JavaPlugin implements Listener {
     // ====================================================================
 
     private void startAnimator() {
-        animator = Bukkit.getScheduler().runTaskTimer(this, () -> {
+        // Folia-safe: a global-region repeating driver advances the shared tick
+        // counter and computes the current frame, then hops each player's work
+        // (action bar send / menu border repaint, which touch that player and
+        // their open inventory) onto THAT player's entity scheduler. Period and
+        // cadence are unchanged (1 tick), so timing semantics are identical on
+        // Paper/Purpur (single-threaded) and Folia.
+        animator = Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, task -> {
             ticks++;
-            if (hotbarEnabled && !hotbarFramesJava.isEmpty() && ticks % hotbarInterval == 0) {
+            boolean doHotbar = hotbarEnabled && !hotbarFramesJava.isEmpty() && ticks % hotbarInterval == 0;
+            boolean doMenu = menuEnabled && !openMenus.isEmpty() && ticks % menuInterval == 0;
+            if (!doHotbar && !doMenu) return;
+
+            final Component java;
+            final Component bedrock;
+            if (doHotbar) {
                 int i = (int) ((ticks / hotbarInterval) % hotbarFramesJava.size());
-                Component java = hotbarFramesJava.get(i);
-                Component bedrock = hotbarFramesBedrock.get(i);
+                java = hotbarFramesJava.get(i);
+                bedrock = hotbarFramesBedrock.get(i);
+            } else {
+                java = null;
+                bedrock = null;
+            }
+
+            if (doHotbar) {
                 for (Player p : Bukkit.getOnlinePlayers()) {
-                    if (enabled(hotbarOn, p, defaultHotbar)) {
-                        p.sendActionBar(isBedrock(p.getUniqueId()) ? bedrock : java);
-                    }
+                    p.getScheduler().run(this, t -> {
+                        if (enabled(hotbarOn, p, defaultHotbar)) {
+                            p.sendActionBar(isBedrock(p.getUniqueId()) ? bedrock : java);
+                        }
+                    }, null);
                 }
             }
-            if (menuEnabled && !openMenus.isEmpty() && ticks % menuInterval == 0) {
+            if (doMenu) {
                 for (UUID id : openMenus) {
                     Player p = Bukkit.getPlayer(id);
                     if (p == null) continue;
-                    Inventory top = p.getOpenInventory().getTopInventory();
-                    if (top.getHolder() instanceof MenuHolder) paintBorder(top);
+                    p.getScheduler().run(this, t -> {
+                        Inventory top = p.getOpenInventory().getTopInventory();
+                        if (top.getHolder() instanceof MenuHolder) paintBorder(top);
+                    }, null);
                 }
             }
         }, 1L, 1L);
@@ -804,7 +828,7 @@ public final class KawaiiSparkles extends JavaPlugin implements Listener {
             e.getInventory().setItem(slot, footstepsButton(p, bedrock));
             p.playSound(p.getLocation(), "block.note_block.hat", 0.6f, now ? 1.6f : 1.0f);
         } else if (slot == base + 3) {
-            Bukkit.getScheduler().runTask(this, () -> openEffectsMenu(p));
+            p.getScheduler().run(this, t -> openEffectsMenu(p), null);
         } else if (slot == base + 4) {
             boolean now = !enabled(hotbarOn, p, defaultHotbar);
             hotbarOn.put(p.getUniqueId(), now);
@@ -827,11 +851,11 @@ public final class KawaiiSparkles extends JavaPlugin implements Listener {
         int size = e.getInventory().getSize();
         int slot = e.getRawSlot();
         if (slot < 0 || slot >= size) return;
-        if (slot == size - 1) { Bukkit.getScheduler().runTask(this, () -> openMenu(p)); return; }
+        if (slot == size - 1) { p.getScheduler().run(this, t -> openMenu(p), null); return; }
         List<ActionData> shown = shownActions();
         if (slot < shown.size()) {
             ActionType type = shown.get(slot).type;
-            Bukkit.getScheduler().runTask(this, () -> openPicker(p, type));
+            p.getScheduler().run(this, t -> openPicker(p, type), null);
         }
     }
 
@@ -845,7 +869,7 @@ public final class KawaiiSparkles extends JavaPlugin implements Listener {
         if (slot < 0 || slot >= size) return;
         boolean bedrock = isBedrock(p.getUniqueId());
 
-        if (slot == size - 1) { Bukkit.getScheduler().runTask(this, () -> openEffectsMenu(p)); return; }
+        if (slot == size - 1) { p.getScheduler().run(this, t -> openEffectsMenu(p), null); return; }
 
         ActionData a = actions.get(ph.type);
         if (a == null || slot >= a.options.size()) return;

@@ -22,7 +22,6 @@ import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
-import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.Transformation;
 import org.bukkit.util.Vector;
 import org.joml.Vector3f;
@@ -91,11 +90,15 @@ public final class KawaiiMobChat extends JavaPlugin implements Listener {
         loadReputation();
         getServer().getPluginManager().registerEvents(this, this);
         // Memory sweeper: every minute, drop stale or despawned-mob entries.
-        Bukkit.getScheduler().runTaskTimer(this, this::sweepMemories, 20L * 60L, 20L * 60L);
+        // Folia-safe: only iterates global collections + reads entities by id,
+        // no cross-region entity mutation, so the global-region scheduler fits.
+        Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, task -> sweepMemories(),
+                20L * 60L, 20L * 60L);
         // Reputation autosave: every 5 minutes, async, so a server crash
         // doesn't lose recent kill data (onDisable doesn't run on crash).
-        Bukkit.getScheduler().runTaskTimerAsynchronously(this, this::saveReputation,
-                20L * 60L * 5L, 20L * 60L * 5L);
+        // Async scheduler uses real time, so convert ticks -> millis (*50).
+        Bukkit.getAsyncScheduler().runAtFixedRate(this, task -> saveReputation(),
+                20L * 60L * 5L * 50L, 20L * 60L * 5L * 50L, java.util.concurrent.TimeUnit.MILLISECONDS);
         getLogger().info("(\u2727) KawaiiMobChat ready ~ enabled=" + enabled
                 + ", model=" + model + ", range=" + rangeBlocks
                 + ", memory=" + memoryEnabled
@@ -105,7 +108,8 @@ public final class KawaiiMobChat extends JavaPlugin implements Listener {
 
     @Override
     public void onDisable() {
-        Bukkit.getScheduler().cancelTasks(this);
+        Bukkit.getGlobalRegionScheduler().cancelTasks(this);
+        Bukkit.getAsyncScheduler().cancelTasks(this);
         saveReputation();
         lastChatAt.clear();
         inFlight.clear();
@@ -208,8 +212,8 @@ public final class KawaiiMobChat extends JavaPlugin implements Listener {
             return;
         }
 
-        // entity lookups must happen on main thread
-        Bukkit.getScheduler().runTask(this, () -> findTargetThenChat(player, message, id));
+        // entity lookups must happen on the player's region thread (Folia-safe).
+        player.getScheduler().run(this, t -> findTargetThenChat(player, message, id), null);
     }
 
     private void findTargetThenChat(Player player, String message, UUID id) {
@@ -231,7 +235,7 @@ public final class KawaiiMobChat extends JavaPlugin implements Listener {
         final String context = buildContext(target, player);
         final List<DeepSeekClient.Message> history = snapshotHistory(mobId);
 
-        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+        Bukkit.getAsyncScheduler().runNow(this, asyncTask -> {
             DeepSeekClient.Reply r;
             try {
                 String system = Personas.forMob(mobType);
@@ -249,7 +253,8 @@ public final class KawaiiMobChat extends JavaPlugin implements Listener {
             }
 
             final DeepSeekClient.Reply reply = r;
-            Bukkit.getScheduler().runTask(this, () -> {
+            // Hop back to the player's region thread to mutate entities safely.
+            player.getScheduler().run(this, t -> {
                 inFlight.remove(id);
                 if (reply == null || reply.error != null || reply.reply == null) {
                     if (reply != null && reply.error != null) {
@@ -259,7 +264,7 @@ public final class KawaiiMobChat extends JavaPlugin implements Listener {
                 }
                 recordTurn(mobId, userTurn, reply);
                 applyReply(player, mobId, mobType, reply);
-            });
+            }, null);
         });
     }
 
@@ -424,26 +429,22 @@ public final class KawaiiMobChat extends JavaPlugin implements Listener {
         } catch (Throwable ignored) {}
 
         // Re-issue a flee path every half second for ~4s — passive AI keeps
-        // overriding the path otherwise.
+        // overriding the path otherwise. Folia-safe: hop onto the mob's own
+        // entity scheduler so the pathfinder mutation runs on its region thread.
         final Vector dir = away.clone();
-        final UUID mobId = mob.getUniqueId();
-        new BukkitRunnable() {
-            int ticks = 0;
-            @Override
-            public void run() {
-                Entity e = Bukkit.getEntity(mobId);
-                if (!(e instanceof Mob) || e.isDead() || ticks >= 80) {
-                    cancel();
-                    return;
-                }
-                Mob m = (Mob) e;
-                try {
-                    Location target = m.getLocation().add(dir.clone().multiply(8));
-                    m.getPathfinder().moveTo(target, 1.4);
-                } catch (Throwable ignored) {}
-                ticks += 10;
+        final int[] ticks = {0};
+        mob.getScheduler().runAtFixedRate(this, task -> {
+            Mob m = mob;
+            if (m.isDead() || !m.isValid() || ticks[0] >= 80) {
+                task.cancel();
+                return;
             }
-        }.runTaskTimer(this, 0L, 10L);
+            try {
+                Location target = m.getLocation().add(dir.clone().multiply(8));
+                m.getPathfinder().moveTo(target, 1.4);
+            } catch (Throwable ignored) {}
+            ticks[0] += 10;
+        }, null, 1L, 10L);
     }
 
     // ============== CONTEXT ==============
@@ -702,11 +703,12 @@ public final class KawaiiMobChat extends JavaPlugin implements Listener {
         if (picked == null) return;
 
         banterCooldown.put(picked.getUniqueId(), System.currentTimeMillis());
+        final Mob listener = picked;
         final UUID listenerId = picked.getUniqueId();
         final String type = mobType;
         final String overheard = spokenLine;
 
-        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+        Bukkit.getAsyncScheduler().runNow(this, asyncTask -> {
             DeepSeekClient.Reply r;
             try {
                 String system = Personas.forMob(type);
@@ -724,7 +726,8 @@ public final class KawaiiMobChat extends JavaPlugin implements Listener {
             if (r == null || r.error != null || r.reply == null) return;
 
             final DeepSeekClient.Reply rr = r;
-            Bukkit.getScheduler().runTask(this, () -> {
+            // Hop onto the listening mob's region thread to mutate it safely.
+            listener.getScheduler().run(this, t -> {
                 Mob banterMob = resolveMob(listenerId);
                 if (banterMob == null || banterMob.isDead()) return;
                 String spoken = sanitize(rr.reply);
@@ -741,7 +744,7 @@ public final class KawaiiMobChat extends JavaPlugin implements Listener {
                             .deserialize(c + "<" + name + c + ">" + txt + " " + spoken));
                 }
                 playMoodSound(banterMob, mood);
-            });
+            }, null);
         });
     }
 
@@ -809,34 +812,32 @@ public final class KawaiiMobChat extends JavaPlugin implements Listener {
 
         if (mounted) {
             // Single delayed task: remove the display after the bubble duration.
-            // Direct reference avoids a global UUID lookup.
+            // Folia-safe: route to the display's own entity scheduler.
             final TextDisplay toRemove = display;
-            Bukkit.getScheduler().runTaskLater(this, () -> {
+            toRemove.getScheduler().runDelayed(this, t -> {
                 if (toRemove.isValid()) toRemove.remove();
-            }, maxTicks);
+            }, null, Math.max(1L, maxTicks));
         } else {
             // Fallback: teleport follower. Hold direct references (no per-iteration
-            // Bukkit.getEntity lookups) and run at a coarser interval.
+            // Bukkit.getEntity lookups) and run at a coarser interval. Folia-safe:
+            // run on the display's entity scheduler.
             final TextDisplay disp = display;
             final Mob host = mob;
-            new BukkitRunnable() {
-                long ticks = 0;
-                @Override
-                public void run() {
-                    if (!disp.isValid() || ticks >= maxTicks) {
-                        if (disp.isValid()) disp.remove();
-                        cancel();
-                        return;
-                    }
-                    if (host.isDead() || !host.isValid()) {
-                        disp.remove();
-                        cancel();
-                        return;
-                    }
-                    disp.teleport(host.getLocation().add(0, host.getHeight() + 0.4, 0));
-                    ticks += 5;
+            final long[] ticks = {0L};
+            disp.getScheduler().runAtFixedRate(this, task -> {
+                if (!disp.isValid() || ticks[0] >= maxTicks) {
+                    if (disp.isValid()) disp.remove();
+                    task.cancel();
+                    return;
                 }
-            }.runTaskTimer(this, 0L, 5L);
+                if (host.isDead() || !host.isValid()) {
+                    disp.remove();
+                    task.cancel();
+                    return;
+                }
+                disp.teleportAsync(host.getLocation().add(0, host.getHeight() + 0.4, 0));
+                ticks[0] += 5;
+            }, null, 1L, 5L);
         }
     }
 

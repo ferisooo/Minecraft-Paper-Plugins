@@ -132,7 +132,10 @@ public final class KawaiiRecipes extends JavaPlugin implements Listener {
         if (!enabled || !unlockOnJoin) return;
         final Player p = event.getPlayer();
         // Small delay so the client is fully in before we push the unlocks.
-        Bukkit.getScheduler().runTaskLater(this, () -> {
+        // Folia-safe: this all touches the joining player (recipes, messages,
+        // titles, sounds, particles), so run it on the player's own entity
+        // scheduler. EntityScheduler delays must be >= 1 tick.
+        p.getScheduler().runDelayed(this, t -> {
             if (!p.isOnline()) return;
             int n = unlockAll(p);
             if (n > 0) {
@@ -141,7 +144,7 @@ public final class KawaiiRecipes extends JavaPlugin implements Listener {
                 }
                 celebrate(p);
             }
-        }, joinDelayTicks);
+        }, null, Math.max(1L, joinDelayTicks));
     }
 
     @Override

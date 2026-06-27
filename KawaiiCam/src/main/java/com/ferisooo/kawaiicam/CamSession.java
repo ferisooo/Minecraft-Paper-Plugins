@@ -7,7 +7,7 @@ import org.bukkit.World;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Monster;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitTask;
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import org.bukkit.util.Vector;
 
 import java.util.UUID;
@@ -44,7 +44,7 @@ final class CamSession {
 
     private GameMode prevMode;
     private Location prevLoc;
-    private BukkitTask task;
+    private ScheduledTask task;
     private Vector lastSubjectPos;
 
     // FOLLOW: cached hostile count, refreshed on a throttle instead of every tick.
@@ -96,7 +96,11 @@ final class CamSession {
         if (mode == Mode.PLAYBACK && playback != null) {
             playWorld = Bukkit.getWorld(playback.world);
         }
-        task = Bukkit.getScheduler().runTaskTimer(plugin, this::tick, 1L, 1L);
+        // Folia-safe: the camera drives the OPERATOR every tick (teleports them,
+        // sets their pose/gamemode), so it runs on the operator's own entity
+        // scheduler — that entity may only be touched from its region thread.
+        // EntityScheduler delays must be >= 1; period stays 1 tick as before.
+        task = op.getScheduler().runAtFixedRate(plugin, t -> tick(), null, 1L, 1L);
     }
 
     private void tick() {
@@ -151,11 +155,11 @@ final class CamSession {
         }
         Recorder.Frame f = playback.frames.get(playIndex++);
         Location l = new Location(playWorld, f.x, f.y, f.z, (float) f.yaw, (float) f.pitch);
-        op.teleport(l);
+        op.teleportAsync(l);
     }
 
     private void apply(Player op, World world, Pose pose) {
-        op.teleport(pose.toLocation(world));
+        op.teleportAsync(pose.toLocation(world));
         if (recorder != null) {
             recorder.add(pose, director.currentShot());
             if (maxFrames > 0 && recorder.frameCount() >= maxFrames) {
@@ -171,7 +175,7 @@ final class CamSession {
         Player op = Bukkit.getPlayer(operator);
         if (op == null) return;
         if (prevMode != null) op.setGameMode(prevMode);
-        if (teleportBack && prevLoc != null) op.teleport(prevLoc);
+        if (teleportBack && prevLoc != null) op.teleportAsync(prevLoc);
     }
 
     /**

@@ -17,7 +17,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -46,8 +45,12 @@ public final class InstanceManager {
     private final LootManager loot;
     private final ProgressManager progress;
 
-    /** worldName -> live instance. */
-    private final Map<String, DungeonInstance> instances = new HashMap<>();
+    /**
+     * worldName -> live instance. Concurrent because on Folia the global-region
+     * tick driver reads this map while region/global threads mutate it
+     * (finishStart, cleanup, leave) from different threads.
+     */
+    private final Map<String, DungeonInstance> instances = new java.util.concurrent.ConcurrentHashMap<>();
 
     public InstanceManager(KawaiiDungeons plugin, MobFactory mobs, LootManager loot, ProgressManager progress) {
         this.plugin = plugin;
@@ -112,13 +115,16 @@ public final class InstanceManager {
 
         final Path src = template.toPath();
         final Path dst = dest.toPath();
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+        // Folia-safe: the file copy is off-main I/O (async scheduler). World
+        // creation + teleport-in must run on a region thread, so hop back onto
+        // the global region scheduler when the copy finishes.
+        Bukkit.getAsyncScheduler().runNow(plugin, asyncTask -> {
             try {
                 copyRecursively(src, dst);
                 Files.deleteIfExists(dst.resolve("uid.dat"));
                 Files.deleteIfExists(dst.resolve("session.lock"));
             } catch (Throwable t) {
-                Bukkit.getScheduler().runTask(plugin, () -> {
+                Bukkit.getGlobalRegionScheduler().execute(plugin, () -> {
                     for (UUID id : partyIds) {
                         Player p = Bukkit.getPlayer(id);
                         if (p != null) p.sendMessage("§c(✿) failed to copy the dungeon template: " + t.getMessage());
@@ -127,7 +133,7 @@ public final class InstanceManager {
                 try { deleteRecursively(dst); } catch (Throwable ignored) { /* best effort */ }
                 return;
             }
-            Bukkit.getScheduler().runTask(plugin, () ->
+            Bukkit.getGlobalRegionScheduler().execute(plugin, () ->
                     finishStart(def, difficulty, folderName, dst, partyIds, leader, speedrun, deathless, hardcore,
                             healthMult, damageMult, finalLootMult));
         });
@@ -160,13 +166,16 @@ public final class InstanceManager {
             Player p = Bukkit.getPlayer(id);
             if (p == null) continue;
             inst.addParticipant(id);
-            p.teleport(spawn);
-            p.setGameMode(org.bukkit.GameMode.SURVIVAL);
-            p.sendMessage("§d(✿) ✨ welcome to §f" + ChatColor.translateAlternateColorCodes('&', def.displayName)
-                    + "§d — difficulty §f" + difficulty.name().toLowerCase(Locale.ROOT)
-                    + (hardcore ? " §c[HARDCORE]" : "") + (speedrun ? " §e[SPEEDRUN]" : "")
-                    + (deathless ? " §b[DEATHLESS]" : ""));
-            p.playSound(p.getLocation(), "minecraft:block.beacon.activate", 1f, 1f);
+            // Cross-world teleport must be async on Folia; the follow-up work
+            // touches the player so it hops onto the player's region thread.
+            p.teleportAsync(spawn).thenRun(() -> p.getScheduler().run(plugin, t -> {
+                p.setGameMode(org.bukkit.GameMode.SURVIVAL);
+                p.sendMessage("§d(✿) ✨ welcome to §f" + ChatColor.translateAlternateColorCodes('&', def.displayName)
+                        + "§d — difficulty §f" + difficulty.name().toLowerCase(Locale.ROOT)
+                        + (hardcore ? " §c[HARDCORE]" : "") + (speedrun ? " §e[SPEEDRUN]" : "")
+                        + (deathless ? " §b[DEATHLESS]" : ""));
+                p.playSound(p.getLocation(), "minecraft:block.beacon.activate", 1f, 1f);
+            }, null));
         }
 
         // Spawn static mobs.
@@ -245,15 +254,34 @@ public final class InstanceManager {
 
     // --------------------------------------------------------------- tick
 
-    /** Called every second (resolved from instance-tick-ticks). */
+    /**
+     * Called every second (resolved from instance-tick-ticks) by the global-region
+     * driver in {@link KawaiiDungeons}. This method only READS the live instance
+     * collection; each instance's per-tick work (which touches entities/blocks in
+     * that instance's own world) is hopped onto the region thread owning that
+     * world via the RegionScheduler, so it always runs on the correct Folia thread.
+     */
     public void tickAll() {
         if (instances.isEmpty()) return;
         for (DungeonInstance inst : new ArrayList<>(instances.values())) {
-            try {
-                tickInstance(inst);
-            } catch (Throwable t) {
-                plugin.getLogger().warning("(✿) error ticking instance " + inst.worldName + ": " + t.getMessage());
+            final DungeonInstance instance = inst;
+            World w = Bukkit.getWorld(inst.worldName);
+            if (w == null) {
+                // World gone — fail bookkeeping is global-safe, run it directly.
+                try { tickInstance(instance); }
+                catch (Throwable t) {
+                    plugin.getLogger().warning("(✿) error ticking instance " + instance.worldName + ": " + t.getMessage());
+                }
+                continue;
             }
+            Location region = instance.def.spawn(w);
+            Bukkit.getRegionScheduler().execute(plugin, region, () -> {
+                try {
+                    tickInstance(instance);
+                } catch (Throwable t) {
+                    plugin.getLogger().warning("(✿) error ticking instance " + instance.worldName + ": " + t.getMessage());
+                }
+            });
         }
     }
 
@@ -322,7 +350,7 @@ public final class InstanceManager {
                     inst.objective.forceComplete();
                 } else {
                     org.bukkit.util.Vector dir = goal.toVector().subtract(cur.toVector()).normalize().multiply(1.0);
-                    npc.teleport(cur.clone().add(dir));
+                    npc.teleportAsync(cur.clone().add(dir));
                 }
             }
             case TIMED_CHALLENGE -> {
@@ -543,8 +571,12 @@ public final class InstanceManager {
                 if (!rescuer.getWorld().getName().equals(inst.worldName)) continue;
                 if (rescuer.getLocation().distanceSquared(dloc) <= 4.0) {
                     // Bring the spectator back to the spot they fell, then revive.
-                    downed.teleport(dloc);
-                    revivePlayer(inst, downed, rescuer);
+                    // Async teleport, then run the revive on the downed player's
+                    // region thread (revivePlayer touches the downed player).
+                    final Location returnLoc = dloc;
+                    final Player rescuerFinal = rescuer;
+                    downed.teleportAsync(returnLoc).thenRun(() ->
+                            downed.getScheduler().run(plugin, t -> revivePlayer(inst, downed, rescuerFinal), null));
                     break;
                 }
             }
@@ -556,11 +588,14 @@ public final class InstanceManager {
         Player p = Bukkit.getPlayer(id);
         if (p != null) {
             p.sendTitle("§4§lOUT", "§7you're out of this run~", 5, 50, 10);
-            p.teleport(mainWorld().getSpawnLocation());
-            p.setGameMode(org.bukkit.GameMode.SURVIVAL);
-            p.setWalkSpeed(0.2f);
-            p.setFlySpeed(0.1f);
-            if (inst.bossBar() != null) inst.bossBar().removePlayer(p);
+            // Cross-world teleport (async on Folia); player-state changes hop
+            // onto the player's own region thread afterwards.
+            p.teleportAsync(mainWorld().getSpawnLocation()).thenRun(() -> p.getScheduler().run(plugin, t -> {
+                p.setGameMode(org.bukkit.GameMode.SURVIVAL);
+                p.setWalkSpeed(0.2f);
+                p.setFlySpeed(0.1f);
+                if (inst.bossBar() != null) inst.bossBar().removePlayer(p);
+            }, null));
         }
     }
 
@@ -627,9 +662,15 @@ public final class InstanceManager {
     public void fail(DungeonInstance inst, String reason) {
         if (inst.finished()) return;
         inst.setFinished(true);
+        // fail() can be reached from the global driver thread (null-world tick),
+        // so the per-player feedback must hop onto each player's own region
+        // thread rather than being touched directly.
         for (Player p : inst.onlineParticipants()) {
-            p.sendTitle("§4§l✖ FAILED ✖", "§7" + reason, 5, 60, 20);
-            p.playSound(p.getLocation(), "minecraft:entity.wither.death", 1f, 0.8f);
+            final Player player = p;
+            player.getScheduler().run(plugin, t -> {
+                player.sendTitle("§4§l✖ FAILED ✖", "§7" + reason, 5, 60, 20);
+                player.playSound(player.getLocation(), "minecraft:entity.wither.death", 1f, 0.8f);
+            }, null);
         }
         cleanup(inst);
     }
@@ -643,8 +684,9 @@ public final class InstanceManager {
         if (inst.bossBar() != null) inst.bossBar().removePlayer(p);
         p.setGameMode(org.bukkit.GameMode.SURVIVAL);
         p.setWalkSpeed(0.2f);
-        p.teleport(mainWorld().getSpawnLocation());
-        p.sendMessage("§d(✿) you left the dungeon~");
+        // Cross-world teleport (async on Folia); confirmation message after.
+        p.teleportAsync(mainWorld().getSpawnLocation()).thenRun(() ->
+                p.sendMessage("§d(✿) you left the dungeon~"));
         if (inst.onlineParticipants().isEmpty()) {
             fail(inst, "everyone left");
         }
@@ -658,18 +700,23 @@ public final class InstanceManager {
         World w = Bukkit.getWorld(inst.worldName);
         if (w != null) {
             for (Player p : new ArrayList<>(w.getPlayers())) {
-                p.setGameMode(org.bukkit.GameMode.SURVIVAL);
-                p.setWalkSpeed(0.2f);
-                p.setFlySpeed(0.1f);
-                p.teleport(fallback.getSpawnLocation());
+                // Player-state changes hop onto the player's own region thread,
+                // then an async cross-world teleport pulls them to the fallback.
+                p.getScheduler().run(plugin, t -> {
+                    p.setGameMode(org.bukkit.GameMode.SURVIVAL);
+                    p.setWalkSpeed(0.2f);
+                    p.setFlySpeed(0.1f);
+                    p.teleportAsync(fallback.getSpawnLocation());
+                }, null);
             }
         }
         final String name = inst.worldName;
-        // Unload + delete a tick later so teleports settle.
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+        // Unload + delete a tick later so teleports settle. World unload/delete
+        // is global server state -> global region scheduler (delay >= 1 tick).
+        Bukkit.getGlobalRegionScheduler().runDelayed(plugin, task -> {
             World ww = Bukkit.getWorld(name);
             if (ww != null) {
-                for (Player p : new ArrayList<>(ww.getPlayers())) p.teleport(mainWorld().getSpawnLocation());
+                for (Player p : new ArrayList<>(ww.getPlayers())) p.teleportAsync(mainWorld().getSpawnLocation());
                 Bukkit.unloadWorld(ww, false);
             }
             File folder = new File(Bukkit.getWorldContainer(), name);

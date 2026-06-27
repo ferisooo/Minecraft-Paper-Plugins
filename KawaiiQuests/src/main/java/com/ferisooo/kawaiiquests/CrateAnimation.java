@@ -63,7 +63,9 @@ public final class CrateAnimation implements Runnable {
         // purely a reveal; the announcement still fires at the end.
         giveReward();
         player.openInventory(inv);
-        Bukkit.getScheduler().runTask(plugin, this);
+        // Folia-safe: the animation touches this player only — run it on the
+        // player's entity scheduler.
+        player.getScheduler().run(plugin, t -> run(), null);
     }
 
     @Override
@@ -79,7 +81,7 @@ public final class CrateAnimation implements Runnable {
         // Ease-out: delay grows as we approach the end so the reel slows down.
         long delay = 1 + Math.round(5.0 * step / steps);
         step++;
-        Bukkit.getScheduler().runTaskLater(plugin, this, delay);
+        player.getScheduler().runDelayed(plugin, t -> run(), null, Math.max(1, delay));
     }
 
     private void finish() {
@@ -99,13 +101,13 @@ public final class CrateAnimation implements Runnable {
                     "%item%", KawaiiQuests.pretty(winner.material().name())));
         }
         // Let them admire it, then close if they're still looking at the crate.
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+        player.getScheduler().runDelayed(plugin, t -> {
             if (player.isOnline()
                     && player.getOpenInventory().getTopInventory().getHolder() instanceof GuiHolder gh
                     && gh.kind() == GuiHolder.Kind.CRATE) {
                 player.closeInventory();
             }
-        }, 60L);
+        }, null, 60L);
     }
 
     private void giveReward() {

@@ -170,8 +170,10 @@ public final class KawaiiRTP extends JavaPlugin {
         p.sendMessage("§d(✧) rolling a safe spot~ ✨");
         Location origin = p.getLocation();
         // Brief delay so the chat message renders before the freeze of chunk loads.
-        Bukkit.getScheduler().runTaskLater(this,
-                () -> beginSearch(p, world, origin, 0), warmupTicks);
+        // Folia-safe: the search touches the player, so hop on the player's
+        // entity scheduler (delay must be >= 1 tick).
+        p.getScheduler().runDelayed(this,
+                t -> beginSearch(p, world, origin, 0), null, Math.max(1, warmupTicks));
         return true;
     }
 
@@ -207,8 +209,11 @@ public final class KawaiiRTP extends JavaPlugin {
             fut = world.getChunkAtAsync(chunkX, chunkZ, true);
         } catch (Throwable t) {
             // Some server forks expose getChunkAtAsync slightly differently;
-            // fall back to the sync load on the main thread.
-            Bukkit.getScheduler().runTask(this, () -> {
+            // fall back to the sync load on the candidate's region thread.
+            // Folia-safe: block reads + chunk load must run on the region that
+            // owns the candidate location.
+            Location candidate = new Location(world, xz[0] + 0.5, world.getMinHeight() + 1, xz[1] + 0.5);
+            Bukkit.getRegionScheduler().execute(this, candidate, () -> {
                 world.getChunkAt(chunkX, chunkZ);
                 evaluateCandidate(p, world, origin, xz[0], xz[1], attempt);
             });
@@ -222,19 +227,28 @@ public final class KawaiiRTP extends JavaPlugin {
                 scheduleNext(p, world, origin, attempt + 1);
                 return;
             }
-            // Block reads + teleport must happen on the main thread.
-            Bukkit.getScheduler().runTask(this,
+            // Block reads + teleport must happen on the candidate's region thread.
+            // (Region ownership is by chunk column, so any in-bounds Y works.)
+            Location candidate = new Location(world, xz[0] + 0.5, world.getMinHeight() + 1, xz[1] + 0.5);
+            Bukkit.getRegionScheduler().execute(this, candidate,
                     () -> evaluateCandidate(p, world, origin, xz[0], xz[1], attempt));
         });
     }
 
     private void scheduleNext(Player p, World world, Location origin, int next) {
         // Spread retries across ticks so a pathological run doesn't stall a tick.
-        Bukkit.getScheduler().runTask(this, () -> beginSearch(p, world, origin, next));
+        // Folia-safe: beginSearch touches the player (online check / messages),
+        // so run it on the player's entity scheduler.
+        p.getScheduler().run(this, t -> beginSearch(p, world, origin, next), null);
     }
 
     private void evaluateCandidate(Player p, World world, Location origin, int x, int z, int attempt) {
-        if (!p.isOnline()) return;
+        // NOTE: this method runs on the candidate column's RegionScheduler, so it
+        // may ONLY read world/block state at (x, z). It must NOT touch the player
+        // (online check, messages, location, sounds) — the player lives in a
+        // different region. On rejection we hop back to the player via
+        // scheduleNext; on success we hop the player-touching work (departure
+        // effects + teleport + feedback) onto the player's EntityScheduler.
 
         // MOTION_BLOCKING_NO_LEAVES skips leaves but treats water as solid,
         // which is exactly what we want for the first cut: anything reported
@@ -242,13 +256,13 @@ public final class KawaiiRTP extends JavaPlugin {
         // then re-check that the block isn't water/lava etc.
         int topY = world.getHighestBlockYAt(x, z, HeightMap.MOTION_BLOCKING_NO_LEAVES);
         if (topY < minY || topY > maxY) {
-            beginSearch(p, world, origin, attempt + 1);
+            scheduleNext(p, world, origin, attempt + 1);
             return;
         }
 
         Block stand = world.getBlockAt(x, topY, z);
         if (!isSafeStandBlock(stand)) {
-            beginSearch(p, world, origin, attempt + 1);
+            scheduleNext(p, world, origin, attempt + 1);
             return;
         }
 
@@ -256,7 +270,7 @@ public final class KawaiiRTP extends JavaPlugin {
         for (int i = 1; i <= requiredHeadroom; i++) {
             Block above = world.getBlockAt(x, topY + i, z);
             if (!isPassableAir(above)) {
-                beginSearch(p, world, origin, attempt + 1);
+                scheduleNext(p, world, origin, attempt + 1);
                 return;
             }
         }
@@ -270,56 +284,66 @@ public final class KawaiiRTP extends JavaPlugin {
         Keyed biome = world.getBiome(x, topY, z);
         String biomeKey = biome.getKey().getKey().toLowerCase(Locale.ROOT);
         if (blockedBiomes.contains(biomeKey)) {
-            beginSearch(p, world, origin, attempt + 1);
+            scheduleNext(p, world, origin, attempt + 1);
             return;
         }
         if (avoidOcean && biomeKey.contains("ocean")) {
-            beginSearch(p, world, origin, attempt + 1);
+            scheduleNext(p, world, origin, attempt + 1);
             return;
         }
 
         // All checks passed — teleport. Center on the block and preserve
         // facing so the player isn't disoriented.
-        Location dest = new Location(world,
+        final Location dest = new Location(world,
                 x + 0.5, topY + 1.0, z + 0.5,
                 origin.getYaw(), origin.getPitch());
         final int distance = (int) Math.floor(
                 origin.toVector().setY(0).distance(dest.toVector().setY(0)));
         final String biomePretty = prettyBiome(biomeKey);
+        final int topYFinal = topY;
 
-        // Departure puff at the spot they're leaving (chunk is loaded — they're here).
-        if (effects) {
-            Location from = p.getLocation().add(0, 1.0, 0);
-            world.spawnParticle(Particle.PORTAL, from, 60, 0.4, 1.0, 0.4, 0.6);
-            p.playSound(p.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 0.8f, 1.0f);
-        }
+        // Hop all player-touching work onto the player's region thread. The
+        // departure effects read p.getLocation()/play a sound on the player, so
+        // they must run where the player currently lives.
+        p.getScheduler().run(this, t -> {
+            if (!p.isOnline()) return;
 
-        p.teleportAsync(dest).thenAccept(success -> {
-            if (Boolean.TRUE.equals(success)) {
-                lastUsedMillis.put(p.getUniqueId(), System.currentTimeMillis());
-                Bukkit.getScheduler().runTask(this, () -> {
-                    p.sendMessage("§d(✧) tp'd ✨ §f" + distance
-                            + "§d blocks away §8(" + x + ", " + topY + ", " + z
-                            + " §8in " + biomeKey + ")");
-                    if (effects) {
-                        Location at = dest.clone().add(0, 1.0, 0);
-                        world.spawnParticle(Particle.REVERSE_PORTAL, at, 60, 0.4, 1.0, 0.4, 0.4);
-                        world.spawnParticle(Particle.FIREWORK, at, 24, 0.3, 0.6, 0.3, 0.05);
-                        p.playSound(dest, Sound.ENTITY_ENDERMAN_TELEPORT, 0.9f, 1.2f);
-                        try {
-                            p.sendTitle("§d✦ Teleported ✦",
-                                    "§f" + distance + "§7 blocks · §b" + biomePretty,
-                                    8, 40, 12);
-                        } catch (Throwable ignored) {
-                            // Title is just garnish — chat message already sent.
-                        }
-                    }
-                });
-            } else {
-                Bukkit.getScheduler().runTask(this, () -> p.sendMessage(
-                        "§c(✧) teleport refused — try again~"));
+            // Departure puff at the spot they're leaving.
+            if (effects) {
+                Location from = p.getLocation().add(0, 1.0, 0);
+                world.spawnParticle(Particle.PORTAL, from, 60, 0.4, 1.0, 0.4, 0.6);
+                p.playSound(p.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 0.8f, 1.0f);
             }
-        });
+
+            p.teleportAsync(dest).thenAccept(success -> {
+                if (Boolean.TRUE.equals(success)) {
+                    lastUsedMillis.put(p.getUniqueId(), System.currentTimeMillis());
+                    // Folia-safe: the player now lives in dest's region; do the
+                    // post-teleport feedback on the player's entity scheduler.
+                    p.getScheduler().run(this, t2 -> {
+                        p.sendMessage("§d(✧) tp'd ✨ §f" + distance
+                                + "§d blocks away §8(" + x + ", " + topYFinal + ", " + z
+                                + " §8in " + biomeKey + ")");
+                        if (effects) {
+                            Location at = dest.clone().add(0, 1.0, 0);
+                            world.spawnParticle(Particle.REVERSE_PORTAL, at, 60, 0.4, 1.0, 0.4, 0.4);
+                            world.spawnParticle(Particle.FIREWORK, at, 24, 0.3, 0.6, 0.3, 0.05);
+                            p.playSound(dest, Sound.ENTITY_ENDERMAN_TELEPORT, 0.9f, 1.2f);
+                            try {
+                                p.sendTitle("§d✦ Teleported ✦",
+                                        "§f" + distance + "§7 blocks · §b" + biomePretty,
+                                        8, 40, 12);
+                            } catch (Throwable ignored) {
+                                // Title is just garnish — chat message already sent.
+                            }
+                        }
+                    }, null);
+                } else {
+                    p.getScheduler().run(this, t2 -> p.sendMessage(
+                            "§c(✧) teleport refused — try again~"), null);
+                }
+            });
+        }, null);
     }
 
     /** "snowy_taiga" → "Snowy Taiga" for friendly display. */

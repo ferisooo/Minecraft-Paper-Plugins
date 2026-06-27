@@ -108,7 +108,11 @@ public final class KawaiiSeasons extends JavaPlugin implements Listener {
         dataFile = new File(getDataFolder(), "data.yml");
         loadData();
         getServer().getPluginManager().registerEvents(this, this);
-        Bukkit.getScheduler().runTaskTimer(this, this::tick, updateTicks, updateTicks);
+        // Folia-safe: a global-region repeating driver runs the world-wide work
+        // (season change, weather) and READS the online-player collection, then
+        // hops each player's per-player work (effects, particles, action bar,
+        // snow around them) onto THAT player's entity scheduler.
+        Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, task -> tick(), updateTicks, updateTicks);
         updateAllSeasonPdc(); // so the sidebar shows it immediately after a reload
         getLogger().info("(✧) KawaiiSeasons ready ~ it's " + currentSeason().display() + "§r! 🍃");
     }
@@ -190,15 +194,19 @@ public final class KawaiiSeasons extends JavaPlugin implements Listener {
         // Weather: force a storm in winter, release it otherwise (only worlds we forced).
         manageWeather(season);
 
-        // Per-player effects + ambience.
+        // Per-player effects + ambience. Each player's work touches that player
+        // (and blocks in their region for snow), so hop it onto the player's own
+        // entity scheduler — the driver above only READS the collection.
         for (Player p : Bukkit.getOnlinePlayers()) {
-            World w = p.getWorld();
-            if (!applies(w)) continue;
-            if (p.getGameMode() == GameMode.SPECTATOR) continue;
-            applyPlayerEffects(p, season);
-            if (ambienceParticles) spawnAmbience(p, season);
-            if (actionBar) p.sendActionBar(LEGACY.deserialize(actionBarText(season)));
-            if (season == Season.WINTER && snowSimulation) simulateSnow(p);
+            p.getScheduler().run(this, t -> {
+                World w = p.getWorld();
+                if (!applies(w)) return;
+                if (p.getGameMode() == GameMode.SPECTATOR) return;
+                applyPlayerEffects(p, season);
+                if (ambienceParticles) spawnAmbience(p, season);
+                if (actionBar) p.sendActionBar(LEGACY.deserialize(actionBarText(season)));
+                if (season == Season.WINTER && snowSimulation) simulateSnow(p);
+            }, null);
         }
     }
 
@@ -213,10 +221,13 @@ public final class KawaiiSeasons extends JavaPlugin implements Listener {
             case WINTER -> "§7snow blankets the land — bundle up!";
         };
         for (Player p : Bukkit.getOnlinePlayers()) {
-            if (!applies(p.getWorld())) continue;
-            try {
-                p.sendTitle(season.display(), sub, 10, 60, 20);
-            } catch (Throwable ignored) { /* title is garnish */ }
+            // sendTitle touches the player — run it on the player's region thread.
+            p.getScheduler().run(this, t -> {
+                if (!applies(p.getWorld())) return;
+                try {
+                    p.sendTitle(season.display(), sub, 10, 60, 20);
+                } catch (Throwable ignored) { /* title is garnish */ }
+            }, null);
         }
     }
 
@@ -341,13 +352,14 @@ public final class KawaiiSeasons extends JavaPlugin implements Listener {
         updateSeasonPdc(p);
         if (!announce || !applies(p.getWorld())) return;
         Season s = currentSeason();
-        // Brief delay so the client is fully in before the title shows.
-        Bukkit.getScheduler().runTaskLater(this, () -> {
+        // Brief delay so the client is fully in before the title shows. Folia-safe:
+        // sendTitle touches the player, so run it on the player's entity scheduler.
+        p.getScheduler().runDelayed(this, t -> {
             if (!p.isOnline()) return;
             try {
                 p.sendTitle(s.display(), "§7day " + dayWithinSeason() + "/" + daysPerSeason, 10, 50, 15);
             } catch (Throwable ignored) { /* title is garnish */ }
-        }, 30L);
+        }, null, Math.max(1, 30L));
     }
 
     @EventHandler
@@ -364,7 +376,12 @@ public final class KawaiiSeasons extends JavaPlugin implements Listener {
     }
 
     private void updateAllSeasonPdc() {
-        for (Player p : Bukkit.getOnlinePlayers()) updateSeasonPdc(p);
+        // Called from the global-region tick driver and onEnable; touching each
+        // player's PDC mutates that entity, so hop it onto the player's own
+        // entity scheduler instead of writing from the global region thread.
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            p.getScheduler().run(this, t -> updateSeasonPdc(p), null);
+        }
     }
 
     /** "&b❄ Winter &7(&f3 days left)" for the action bar above the hotbar. */

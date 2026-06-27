@@ -2,6 +2,7 @@ name: KawaiiSaplings
 version: ${project.version}
 main: com.ferisooo.kawaiisaplings.KawaiiSaplings
 api-version: '1.21'
+folia-supported: true
 author: Ferris
 description: Forces planted saplings to grow into trees on a timer, carving out room so they grow even when the space is not right.
 

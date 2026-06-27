@@ -94,18 +94,14 @@ public final class HerobrineManager {
         if (hasActive() && active.getMode() == HerobrineEntity.Mode.STALKING) {
             // currently staring at someone: keep facing, then vanish when the timer ends
             Player t = active.target();
-            if (t == null || !t.isOnline() || t.getWorld() != active.getLocation().getWorld()) {
+            if (t == null || !t.isOnline()) {
                 vanish();
                 return;
             }
-            active.face(t.getEyeLocation());
-            // ambient unease around the watcher
-            if (ThreadLocalRandom.current().nextInt(3) == 0) {
-                Location l = active.getLocation();
-                l.getWorld().spawnParticle(Particle.SMOKE, l.clone().add(0, 1, 0), 2, 0.2, 0.5, 0.2, 0.0);
-            }
-            for (int i = 0; i < 2; i++) active.decrementStare(); // behaviour tick = 2 game ticks
-            if (active.stareTicksLeft() <= 0) vanish();
+            // Reads the target's eye location + spawns particles near them, so
+            // hop onto the target's region thread (Folia-safe).
+            final Player target = t;
+            target.getScheduler().run(plugin, st -> staringWork(target), null);
             return;
         }
 
@@ -115,18 +111,43 @@ public final class HerobrineManager {
 
         Player p = pickStalkTarget();
         if (p == null) return;
-        double roll = cfg.stalkBaseChance() * weatherMultiplier(p)
-                * (1.0 + plugin.threats().getThreat(p) / 100.0);
-        if (ThreadLocalRandom.current().nextDouble() > roll) return;
+        // The roll + sighting + spawn all read/touch the chosen player, so run
+        // them on that player's region thread (Folia-safe).
+        final Player chosen = p;
+        chosen.getScheduler().run(plugin, st -> {
+            if (!chosen.isOnline()) return;
+            if (hasActive()) return; // someone else got spawned in the meantime
+            double roll = cfg.stalkBaseChance() * weatherMultiplier(chosen)
+                    * (1.0 + plugin.threats().getThreat(chosen) / 100.0);
+            if (ThreadLocalRandom.current().nextDouble() > roll) return;
 
-        Location spot = pickSighting(p);
-        if (spot == null) return;
-        HerobrineEntity e = spawnStalker(p, spot);
-        if (e != null) {
-            p.playSound(p.getLocation(), Sound.AMBIENT_CAVE, 0.6f, 0.7f);
-            plugin.log("Herobrine watches " + p.getName() + " (threat "
-                    + (int) plugin.threats().getThreat(p) + ")");
+            Location spot = pickSighting(chosen);
+            if (spot == null) return;
+            HerobrineEntity e = spawnStalker(chosen, spot);
+            if (e != null) {
+                chosen.playSound(chosen.getLocation(), Sound.AMBIENT_CAVE, 0.6f, 0.7f);
+                plugin.log("Herobrine watches " + chosen.getName() + " (threat "
+                        + (int) plugin.threats().getThreat(chosen) + ")");
+            }
+        }, null);
+    }
+
+    /** The per-stare work, run on the stared-at player's region thread. */
+    private void staringWork(Player t) {
+        if (!hasActive() || active.getMode() != HerobrineEntity.Mode.STALKING) return;
+        if (!t.equals(active.target())) return;
+        if (!t.isOnline() || t.getWorld() != active.getLocation().getWorld()) {
+            vanish();
+            return;
         }
+        active.face(t.getEyeLocation());
+        // ambient unease around the watcher
+        if (ThreadLocalRandom.current().nextInt(3) == 0) {
+            Location l = active.getLocation();
+            l.getWorld().spawnParticle(Particle.SMOKE, l.clone().add(0, 1, 0), 2, 0.2, 0.5, 0.2, 0.0);
+        }
+        for (int i = 0; i < 2; i++) active.decrementStare(); // behaviour tick = 2 game ticks
+        if (active.stareTicksLeft() <= 0) vanish();
     }
 
     private void vanish() {
@@ -188,6 +209,18 @@ public final class HerobrineManager {
             active.setTarget(next);
             t = next;
         }
+        // Everything below reads the target player's location/world and mutates
+        // the target (damage) or the area around it (abilities), so it must run
+        // on the target's region thread (Folia-safe). The packet-NPC face/move/
+        // teleport are packet-only but read the target's position, so they ride
+        // along on the same hop to read it safely.
+        final Player target = t;
+        target.getScheduler().run(plugin, st -> huntingWork(target), null);
+    }
+
+    private void huntingWork(Player t) {
+        if (!hasActive() || active.getMode() != HerobrineEntity.Mode.HUNTING) return;
+        if (!t.isOnline() || !t.equals(active.target())) return;
         if (t.getWorld() != active.getLocation().getWorld()) {
             active.teleport(t.getLocation().add(0, 0, 3));
         }

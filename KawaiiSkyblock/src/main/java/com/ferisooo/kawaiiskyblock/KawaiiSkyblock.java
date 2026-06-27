@@ -108,26 +108,33 @@ public final class KawaiiSkyblock extends JavaPlugin implements Listener {
         dataFile = new File(getDataFolder(), "islands.yml");
         islands = new IslandManager(this, dataFile);
         islands.load();
-        Bukkit.getScheduler().runTask(this, this::loadKnownIslandWorlds);
+        Bukkit.getGlobalRegionScheduler().execute(this, this::loadKnownIslandWorlds);
         getServer().getPluginManager().registerEvents(this, this);
         getServer().getPluginManager().registerEvents(new IslandListeners(this, islands), this);
-        Bukkit.getScheduler().runTaskTimer(this, this::animateMenus, 4L, 4L);
+        // Folia-safe: a global-region driver bumps the shared frame counter, then
+        // hops each player's GUI repaint onto THAT player's entity scheduler (the
+        // open inventory must only be touched on the player's region thread).
+        Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, task -> animateMenus(), 4L, 4L);
         // Debounced islands.yml flush: write dirty data every 30s (off-thread inside)
         // instead of a synchronous full-file write on every single mutation.
-        Bukkit.getScheduler().runTaskTimer(this, islands::flush, 600L, 600L);
+        Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, task -> islands.flush(), 600L, 600L);
         // Periodic island-level recompute (throttled inside).
         long period = Math.max(1L, getConfig().getLong("leaderboard.recompute-minutes", 5L)) * 60L * 20L;
-        Bukkit.getScheduler().runTaskTimer(this, this::recomputeAllLevels, period, period);
+        Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, task -> recomputeAllLevels(), period, period);
         // Inactive-island auto-purge (opt-in: only when purge.inactive-days > 0).
         if (getConfig().getInt("purge.inactive-days", 0) > 0) {
             long checkTicks = Math.max(1L, getConfig().getLong("purge.check-hours", 6L)) * 60L * 60L * 20L;
-            Bukkit.getScheduler().runTaskTimer(this, this::purgeInactiveIslands, checkTicks, checkTicks);
+            Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, task -> purgeInactiveIslands(), checkTicks, checkTicks);
         }
         getLogger().info("(✧) KawaiiSkyblock ready ~ /island to begin! 🏝");
     }
 
     @Override
     public void onDisable() {
+        // Folia-safe shutdown: cancel our region/async tasks (the legacy global
+        // scheduler doesn't exist on Folia).
+        Bukkit.getGlobalRegionScheduler().cancelTasks(this);
+        Bukkit.getAsyncScheduler().cancelTasks(this);
         // Always flush dirty data synchronously on shutdown so nothing is lost.
         if (islands != null) islands.saveNow();
     }
@@ -186,7 +193,7 @@ public final class KawaiiSkyblock extends JavaPlugin implements Listener {
                 createIsland(p);
                 return true;
             case "spawn":
-                p.teleport(mainWorld().getSpawnLocation());
+                p.teleportAsync(mainWorld().getSpawnLocation());
                 p.sendMessage("§d(✧) → spawn ✨");
                 return true;
             case "delete": case "reset":
@@ -306,7 +313,7 @@ public final class KawaiiSkyblock extends JavaPlugin implements Listener {
             p.sendMessage("§c(✧) your island world isn't loaded — ask an admin to check the console~");
             return;
         }
-        p.teleport(w.getSpawnLocation());
+        p.teleportAsync(w.getSpawnLocation());
         p.sendMessage("§d(✧) → your island 🏝");
     }
 
@@ -334,18 +341,20 @@ public final class KawaiiSkyblock extends JavaPlugin implements Listener {
         p.sendMessage("§d(✧) ✨ carving out your island... one moment~");
         final Path src = template.toPath();
         final Path dst = dest.toPath();
-        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+        Bukkit.getAsyncScheduler().runNow(this, asyncTask -> {
             try {
                 copyRecursively(src, dst);
                 Files.deleteIfExists(dst.resolve("uid.dat"));
                 Files.deleteIfExists(dst.resolve("session.lock"));
             } catch (Throwable t) {
-                getServer().getScheduler().runTask(this, () ->
-                        p.sendMessage("§c(✧) failed to copy the island template: " + t.getMessage()));
+                p.getScheduler().run(this, st ->
+                        p.sendMessage("§c(✧) failed to copy the island template: " + t.getMessage()), null);
                 try { deleteRecursively(dst); } catch (Throwable ignored) {}
                 return;
             }
-            getServer().getScheduler().runTask(this, () -> {
+            // World creation is global state; do it on the global region thread,
+            // then hop the player-facing work onto the player's entity scheduler.
+            Bukkit.getGlobalRegionScheduler().execute(this, () -> {
                 World w;
                 try {
                     w = new WorldCreator(folderName).createWorld();
@@ -360,7 +369,7 @@ public final class KawaiiSkyblock extends JavaPlugin implements Listener {
                     return;
                 }
                 islands.createIsland(p.getUniqueId(), folderName);
-                p.teleport(w.getSpawnLocation());
+                p.teleportAsync(w.getSpawnLocation());
                 p.sendMessage("§d(✧) ✨ your island awaits! welcome home~ 🏝");
             });
         });
@@ -373,7 +382,7 @@ public final class KawaiiSkyblock extends JavaPlugin implements Listener {
 
         // If we're standing on it but it isn't currently loaded as a world ref, hop out.
         if (Bukkit.getWorld(folderName) == null && p.getWorld().getName().equals(folderName)) {
-            p.teleport(mainWorld().getSpawnLocation());
+            p.teleportAsync(mainWorld().getSpawnLocation());
         }
 
         PurgeResult r = purgeIsland(p.getUniqueId());
@@ -405,7 +414,7 @@ public final class KawaiiSkyblock extends JavaPlugin implements Listener {
         if (w != null) {
             World fallback = mainWorld();
             for (Player pl : new ArrayList<>(w.getPlayers())) {
-                pl.teleport(fallback.getSpawnLocation());
+                pl.teleportAsync(fallback.getSpawnLocation());
             }
             if (!Bukkit.unloadWorld(w, false)) {
                 return PurgeResult.UNLOAD_FAILED;
@@ -455,7 +464,7 @@ public final class KawaiiSkyblock extends JavaPlugin implements Listener {
         if (world.equals(mainWorld())) return;
         final String name = world.getName();
         if (!islands.isIslandWorld(name)) return;
-        Bukkit.getScheduler().runTaskLater(this, () -> {
+        Bukkit.getGlobalRegionScheduler().runDelayed(this, task -> {
             World w = Bukkit.getWorld(name);
             if (w == null || w.equals(mainWorld())) return;
             if (!w.getPlayers().isEmpty()) return; // someone came back
@@ -648,7 +657,7 @@ public final class KawaiiSkyblock extends JavaPlugin implements Listener {
         boolean ejected = false;
         if (onlineTarget != null && folder != null
                 && onlineTarget.getWorld().getName().equals(folder)) {
-            onlineTarget.teleport(mainWorld().getSpawnLocation());
+            onlineTarget.teleportAsync(mainWorld().getSpawnLocation());
             ejected = true;
         }
 
@@ -715,7 +724,7 @@ public final class KawaiiSkyblock extends JavaPlugin implements Listener {
         }
         World w = islandWorld(owner);
         if (w == null) { p.sendMessage("§c(✧) that island world isn't loaded~"); return; }
-        p.teleport(w.getSpawnLocation());
+        p.teleportAsync(w.getSpawnLocation());
         p.sendMessage("§d(✧) → visiting §f" + name(target) + "§d's island 🏝");
     }
 
@@ -757,7 +766,7 @@ public final class KawaiiSkyblock extends JavaPlugin implements Listener {
         if (args.length < 2) { p.sendMessage("§c(✧) usage: §f/is warp <name>"); return; }
         Location loc = islands.warpLocation(p.getUniqueId(), args[1]);
         if (loc == null) { p.sendMessage("§c(✧) no warp named §f" + args[1]); return; }
-        p.teleport(loc);
+        p.teleportAsync(loc);
         p.sendMessage("§d(✧) → warp §f" + args[1].toLowerCase(Locale.ROOT) + "§d ✨");
     }
 
@@ -771,7 +780,7 @@ public final class KawaiiSkyblock extends JavaPlugin implements Listener {
         }
         Location loc = islands.warpLocation(owner, warpName);
         if (loc == null) { p.sendMessage("§c(✧) no warp named §f" + warpName); return; }
-        p.teleport(loc);
+        p.teleportAsync(loc);
         p.sendMessage("§d(✧) → warp §f" + warpName.toLowerCase(Locale.ROOT) + "§d ✨");
     }
 
@@ -1266,7 +1275,7 @@ public final class KawaiiSkyblock extends JavaPlugin implements Listener {
         boolean fresh = bd != null && valueScanThrottled(owner);
         if (bd == null) {
             // No cached breakdown yet: compute it off the click, next tick.
-            Bukkit.getScheduler().runTask(this, () -> computeValueBreakdown(owner));
+            Bukkit.getGlobalRegionScheduler().execute(this, () -> computeValueBreakdown(owner));
         }
         Map<Material, Integer> perBlock = blockValues();
 
@@ -1367,12 +1376,16 @@ public final class KawaiiSkyblock extends JavaPlugin implements Listener {
 
     private void animateMenus() {
         guiFrame++;
+        final int frame = guiFrame;
         for (Player p : Bukkit.getOnlinePlayers()) {
-            Inventory top = p.getOpenInventory().getTopInventory();
-            if (top.getHolder() instanceof SkyGuiHolder) {
-                paintBorder(top, guiFrame);
-                p.updateInventory();
-            }
+            // The open inventory belongs to the player's region thread — hop there.
+            p.getScheduler().run(this, t -> {
+                Inventory top = p.getOpenInventory().getTopInventory();
+                if (top.getHolder() instanceof SkyGuiHolder) {
+                    paintBorder(top, frame);
+                    p.updateInventory();
+                }
+            }, null);
         }
     }
 
@@ -1413,7 +1426,7 @@ public final class KawaiiSkyblock extends JavaPlugin implements Listener {
             case SLOT_HOME -> { p.closeInventory(); goHome(p); }
             case SLOT_SPAWN -> {
                 p.closeInventory();
-                p.teleport(mainWorld().getSpawnLocation());
+                p.teleportAsync(mainWorld().getSpawnLocation());
                 p.sendMessage("§d(✧) → spawn ✨");
             }
             case SLOT_DELETE -> {
@@ -1595,7 +1608,7 @@ public final class KawaiiSkyblock extends JavaPlugin implements Listener {
         Location loc = islands.warpLocation(holder.context, warp);
         if (loc == null) { p.sendMessage("§c(✧) that warp is gone~"); return; }
         p.closeInventory();
-        p.teleport(loc);
+        p.teleportAsync(loc);
         p.sendMessage("§d(✧) → warp §f" + warp + "§d ✨");
     }
 

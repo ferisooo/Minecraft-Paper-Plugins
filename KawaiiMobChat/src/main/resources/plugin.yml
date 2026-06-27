@@ -1,6 +1,7 @@
 name: KawaiiMobChat
 version: ${project.version}
 api-version: '1.21'
+folia-supported: true
 main: com.ferisooo.kawaiimobchat.KawaiiMobChat
 author: Ferris
 description: Mobs respond to player chat using the DeepSeek API. Insult them and they fight back!

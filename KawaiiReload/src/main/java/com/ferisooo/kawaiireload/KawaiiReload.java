@@ -102,8 +102,12 @@ public final class KawaiiReload extends JavaPlugin implements TabExecutor {
                     return true;
                 }
                 sender.sendMessage("§d(✧) restarting the server~ ✨ §7(needs a restart-script in spigot.yml)");
-                Bukkit.getScheduler().runTaskLater(this,
-                        () -> Bukkit.spigot().restart(), restartDelayTicks);
+                // Server restart is global/world-wide state -> GlobalRegionScheduler.
+                // (Folia-safe; works identically on Paper/Purpur.) Async scheduler
+                // uses real time, but this is the global scheduler which uses ticks;
+                // delay must be >= 1 tick.
+                Bukkit.getGlobalRegionScheduler().runDelayed(this,
+                        t -> Bukkit.spigot().restart(), Math.max(1L, restartDelayTicks));
                 return true;
             case "config":
                 if (args.length < 2) {

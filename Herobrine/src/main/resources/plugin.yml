@@ -2,6 +2,7 @@ name: Herobrine
 version: ${project.version}
 main: com.ferisooo.herobrine.HerobrinePlugin
 api-version: '1.21'
+folia-supported: true
 author: Ferris
 description: Full-scale Herobrine entity system — stalking AI, threat tracking, mysterious structures, environmental manipulation, and a multi-phase boss encounter.
 load: POSTWORLD

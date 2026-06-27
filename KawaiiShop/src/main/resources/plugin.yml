@@ -2,6 +2,7 @@ name: KawaiiShop
 version: ${project.version}
 main: com.ferisooo.kawaiishop.KawaiiShop
 api-version: '1.21'
+folia-supported: true
 author: Ferris
 description: A skyblock-only buy/sell shop GUI with a coin economy, priced by rarity.
 load: POSTWORLD

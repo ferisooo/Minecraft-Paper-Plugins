@@ -143,7 +143,9 @@ public final class KawaiiSigns extends JavaPlugin implements Listener {
         final Block block = event.getBlock();
         final String storedCmd = command;
         // Stash the real command in PDC on the next tick (after the sign state commits).
-        getServer().getScheduler().runTask(this, () -> {
+        // Folia-safe: the task touches a specific block, so route it to that
+        // block's region thread via the RegionScheduler.
+        getServer().getRegionScheduler().run(this, block.getLocation(), task -> {
             if (block.getState() instanceof Sign s) {
                 s.getPersistentDataContainer().set(cmdKey, PersistentDataType.STRING, storedCmd);
                 s.update();

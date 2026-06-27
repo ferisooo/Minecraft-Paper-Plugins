@@ -235,7 +235,7 @@ public final class KawaiiEnderChest extends JavaPlugin implements Listener {
             writeToDisk(id, snapshot);
             return;
         }
-        getServer().getScheduler().runTaskAsynchronously(this, () -> writeToDisk(id, snapshot));
+        getServer().getAsyncScheduler().runNow(this, t -> writeToDisk(id, snapshot));
     }
 
     /** Serializes and writes a detached snapshot to disk. Thread-safe. */

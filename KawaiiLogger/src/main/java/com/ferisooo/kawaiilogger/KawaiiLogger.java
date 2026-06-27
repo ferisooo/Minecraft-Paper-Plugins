@@ -47,7 +47,7 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.projectiles.ProjectileSource;
-import org.bukkit.scheduler.BukkitTask;
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import org.bukkit.util.BoundingBox;
 
 import java.io.File;
@@ -62,7 +62,6 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -93,7 +92,10 @@ public final class KawaiiLogger extends JavaPlugin implements Listener {
     private final Map<UUID, Long> lastDiamondNotify = new ConcurrentHashMap<>();
     private final Map<String, Long> lastStructureNotify = new ConcurrentHashMap<>(); // key = uuid|structureKey
     private final Map<UUID, Set<String>> rareDropsNotified = new ConcurrentHashMap<>();
-    private final Map<UUID, Map<String, Bucket>> buckets = new HashMap<>();
+    // Folia: events fire on per-region threads while the batch-flush driver runs
+    // on the global-region thread, so this map is touched from multiple threads.
+    // (On legacy Paper it was main-thread-only; a plain HashMap is no longer safe.)
+    private final Map<UUID, Map<String, Bucket>> buckets = new ConcurrentHashMap<>();
 
     // ============== COOLDOWNS (ms) ==============
     private static final long CD_DAMAGE   = 30_000L;
@@ -116,7 +118,7 @@ public final class KawaiiLogger extends JavaPlugin implements Listener {
 
     private static final class Bucket {
         final Map<String, Integer> counts = new LinkedHashMap<>();
-        BukkitTask task;
+        ScheduledTask task;
     }
 
     // ============== COLORS ==============
@@ -214,15 +216,25 @@ public final class KawaiiLogger extends JavaPlugin implements Listener {
         getServer().getPluginManager().registerEvents(this, this);
 
         // milestone scan every 60s
-        getServer().getScheduler().runTaskTimer(this, this::checkMilestones, 1200L, 1200L);
-        // periodic state save every 60s
-        getServer().getScheduler().runTaskTimer(this, () -> playerState.saveIfDirty(), 1200L, 1200L);
+        // Folia-safe: a global-region repeating driver reads the online-player
+        // collection, then hops each player's statistic read + milestone work
+        // onto THAT player's entity scheduler (getStatistic touches the player).
+        getServer().getGlobalRegionScheduler().runAtFixedRate(this, task -> checkMilestones(), 1200L, 1200L);
+        // periodic state save every 60s — file I/O, so run it off-main on the
+        // async scheduler (real time: 1200 ticks = 60s = 60000ms).
+        getServer().getAsyncScheduler().runAtFixedRate(this, task -> playerState.saveIfDirty(),
+                1200L * 50L, 1200L * 50L, java.util.concurrent.TimeUnit.MILLISECONDS);
 
         getLogger().info("(\u2727) KawaiiLogger ready ~ batching every " + batchSecs + "s, logs in " + logsDir.getPath());
     }
 
     @Override
     public void onDisable() {
+        // Cancel our repeating Folia tasks (milestone driver on the global-region
+        // scheduler, state-save timer on the async scheduler) so nothing fires
+        // after disable / during a reload.
+        getServer().getGlobalRegionScheduler().cancelTasks(this);
+        getServer().getAsyncScheduler().cancelTasks(this);
         // flush pending buckets
         for (UUID id : new ArrayList<>(buckets.keySet())) {
             Map<String, Bucket> per = buckets.remove(id);
@@ -856,9 +868,17 @@ public final class KawaiiLogger extends JavaPlugin implements Listener {
     // ============== MILESTONES ==============
 
     private void checkMilestones() {
+        // Folia-safe: only READ the online-player collection here, then hop each
+        // player's stat read + milestone work onto that player's entity scheduler.
+        for (Player p : getServer().getOnlinePlayers()) {
+            p.getScheduler().run(this, t -> checkMilestone(p), null);
+        }
+    }
+
+    private void checkMilestone(Player p) {
         long stepBlocks = 1000;
         long stepHours = 10;
-        for (Player p : getServer().getOnlinePlayers()) {
+        {
             UUID id = p.getUniqueId();
             try {
                 long cm = 0;
@@ -902,12 +922,15 @@ public final class KawaiiLogger extends JavaPlugin implements Listener {
     // ============== BATCHING ==============
 
     private void addToBucket(UUID id, String category, String key) {
-        Map<String, Bucket> per = buckets.computeIfAbsent(id, k -> new HashMap<>());
+        Map<String, Bucket> per = buckets.computeIfAbsent(id, k -> new ConcurrentHashMap<>());
         Bucket b = per.computeIfAbsent(category, k -> new Bucket());
         b.counts.merge(key, 1, Integer::sum);
         if (b.task == null) {
-            b.task = getServer().getScheduler().runTaskLater(this,
-                    () -> flushScheduled(id, category), batchTicks);
+            // Folia-safe: the flush only touches shared collections + sends the
+            // batched Discord/file log (no direct entity mutation), so route it
+            // to the global-region scheduler. Delay must be >= 1 tick.
+            b.task = getServer().getGlobalRegionScheduler().runDelayed(this,
+                    t -> flushScheduled(id, category), Math.max(1L, batchTicks));
         }
     }
 

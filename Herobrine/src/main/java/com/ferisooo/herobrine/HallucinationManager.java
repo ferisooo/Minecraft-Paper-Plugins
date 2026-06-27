@@ -32,7 +32,9 @@ public final class HallucinationManager {
                 cfg.herobrineName(), id, cfg.skinTexture(), cfg.skinSignature(), at, cfg.glowingEyes());
         if (fake == null) return;
         fake.lookAt(target.getEyeLocation());
-        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+        // Despawns the fake + spawns particles at its location -> route to that
+        // location's region (Folia-safe).
+        org.bukkit.Bukkit.getRegionScheduler().runDelayed(plugin, at, t -> {
             if (!fake.isDead()) {
                 Location l = fake.getLocation();
                 if (l.getWorld() != null) {
@@ -64,11 +66,13 @@ public final class HallucinationManager {
         Vector back = target.getLocation().getDirection().normalize().multiply(-1);
         for (int i = 0; i < 4; i++) {
             final int step = i;
-            plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+            // Reads the target's location + plays a sound to them -> their entity
+            // scheduler (Folia-safe). Delay must be >= 1.
+            target.getScheduler().runDelayed(plugin, t -> {
                 if (!target.isOnline()) return;
                 Location l = target.getLocation().add(back.clone().multiply(5 - step));
                 target.playSound(l, Sound.BLOCK_GRAVEL_STEP, 0.7f, 0.7f);
-            }, i * 6L);
+            }, null, Math.max(1L, i * 6L));
         }
     }
 

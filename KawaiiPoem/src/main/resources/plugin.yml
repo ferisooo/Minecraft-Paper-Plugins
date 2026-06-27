@@ -2,6 +2,7 @@ name: KawaiiPoem
 version: 1.0.0
 main: com.ferisooo.kawaiipoem.KawaiiPoem
 api-version: '1.21'
+folia-supported: true
 author: Ferris
 description: Plays a custom End-Poem-style scrolling credits message that you type into the config.
 

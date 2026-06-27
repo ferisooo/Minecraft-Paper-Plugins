@@ -2,6 +2,7 @@ name: KawaiiDragon
 version: ${project.version}
 main: com.ferisooo.kawaiidragon.KawaiiDragon
 api-version: '1.21'
+folia-supported: true
 author: Ferris
 description: The Ender Dragon grows stronger (more health & damage) every time it is defeated.
 
