@@ -8,7 +8,7 @@ It **is** a small, self-contained companion: one NPC per player, rendered as a r
 
 It **isn't** a fully physical player NPC. She glides between waypoints rather than running a real walk-cycle physics sim, and she can't place blocks or jump as part of physics. If you want that, install Citizens. Within those bounds, though, she's now reasonably alive — see the **Behavior** section below.
 
-**Bedrock players** can't see the fake-player (Geyser doesn't render it), so they automatically get a **real, visible mob companion** instead — see [Bedrock & real-entity companion](#bedrock--real-entity-companion-feature-1). Your companion also **levels up and unlocks abilities** ([Leveling & abilities](#leveling--abilities-feature-2)) and can be **ridden** ([Mount mode](#mount-mode-feature-4)).
+**Bedrock players** can't see the fake-player (Geyser doesn't render it), so they automatically get a **real, visible mob companion** instead — see [Bedrock & real-entity companion](#bedrock--real-entity-companion-feature-1). Your companion has flat **abilities** like a heal aura and combat assist ([Abilities](#abilities)) and can be **ridden** ([Mount mode](#mount-mode-feature-4)).
 
 ## Behavior
 
@@ -57,7 +57,7 @@ All three are on by default and individually toggleable.
 | `/kc skin <fileName>` | switch to a skin from `skins/<fileName>.json` |
 | `/kc skins` | open the animated appearances GUI (skins + every mob form, paginated) |
 | `/kc form <mob\|human>` | morph into **any living mob** — each form fights hostiles in its own style |
-| `/kc info` | show level, XP, and unlocked abilities |
+| `/kc info` | show active abilities and current form |
 | `/kc mount` / `/kc ride` | ride your companion (real-entity / Bedrock companion only) |
 | `/kc reset` | wipe the conversation history |
 | `/kc reload` | re-read config (op-only) |
@@ -69,24 +69,21 @@ Aliases: `/companion`, `/kwcompanion`.
 The default companion is an NMS fake-player. Geyser can't render that, so **Bedrock owners** (detected via their Floodgate UUID, where the most-significant 64 bits are 0) are instead given a **real Bukkit mob** companion that they can actually see. It is:
 
 - a small friendly flyer (default **Allay**, set by `bedrock-companion-type`),
-- persistent, invulnerable, silent, custom-named with its level,
+- persistent, invulnerable, silent, custom-named,
 - never targetable by hostile mobs, and won't pick up items.
 
 It follows you with the same follow-distance / teleport-threshold tuning as the fake-player, teleporting to catch up when you outrun it or change worlds, and despawns cleanly on dismiss / quit.
 
 Set `bedrock-real-entity: true` to give **every** owner (including Java) the real-entity companion — useful for testing or if you just prefer a visible mob. Java owners keep the fake-player otherwise. Either way `/companion summon|dismiss|skins|mount|info` work the same way for both.
 
-## Leveling & abilities (FEATURE 2)
+## Abilities
 
-Your companion gains XP and **levels up** (config `leveling:`). XP comes from a slow passive trickle while she's summoned, plus a bonus whenever **you kill a mob near her**. Level + XP persist per owner in her memory file.
+> **Leveling/XP was removed.** Your companion no longer gains XP, levels up, announces level-ups, or scales her speed, health, or attack with level — she stays at a fixed baseline. The old `leveling:` config block is ignored; only the flat abilities below remain (config `abilities:`):
 
-On level-up she announces with a **title + sound**, her name tag shows the new level, and abilities scale / unlock:
-
-- **movement-speed** — she follows and pathfinds faster at higher levels.
-- **heal-aura** — from `heal-aura-unlock-level` (default 3) on, she periodically tops up your HP when you're hurt and nearby, with heart particles and a soft chime.
+- **heal-aura** — she periodically tops up your HP when you're hurt and nearby, with heart particles and a soft chime. Always active when enabled (no level gate).
 - **combat-assist** — she re-targets mobs that hit you (and the real-entity companion can never itself be targeted by mobs).
 
-Every ability is individually toggleable. `/companion info` shows your current level, XP toward the next level, and which abilities are active.
+Every ability is individually toggleable. `/companion info` shows which abilities are active and her current form.
 
 ## Cosmetic skins GUI (FEATURE 3)
 
@@ -119,7 +116,7 @@ Each form fights with **its own attack style** (config `form-combat:`):
 | witch / evoker / vex / allay | magic zaps |
 | everything else | melee |
 
-Targeting is **hostile mobs only** — a wither companion kills zombies, creepers and skeletons near you, but never players, pets, villagers, passive animals, or other players' companions. Guard rails enforce this at the event level too: companion-sourced damage against non-hostiles is cancelled, companion explosions never break blocks, and her own vanilla AI can only ever acquire hostile targets. Damage scales with her level, she prioritizes whatever just attacked you (combat-assist), and her own kills award the same XP as yours.
+Targeting is **hostile mobs only** — a wither companion kills zombies, creepers and skeletons near you, but never players, pets, villagers, passive animals, or other players' companions. Guard rails enforce this at the event level too: companion-sourced damage against non-hostiles is cancelled, companion explosions never break blocks, and her own vanilla AI can only ever acquire hostile targets. Her attack damage is a fixed value (it does **not** scale with level — leveling was removed), and she prioritizes whatever just attacked you (combat-assist).
 
 ## Mount mode (FEATURE 4)
 

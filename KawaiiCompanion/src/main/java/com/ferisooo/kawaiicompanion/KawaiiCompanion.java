@@ -38,7 +38,6 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
-import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntityTargetEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
@@ -327,24 +326,13 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
      *  EntityType.valueOf in try/catch with a safe fallback. */
     private String  bedrockCompanionType;
 
-    // ---- FEATURE 2: leveling & abilities ----
-    private boolean levelingEnabled;
-    private int     maxLevel;
-    /** XP needed for level N = xpBase + xpPerLevel * (N-1). */
-    private int     xpBase;
-    private int     xpPerLevel;
-    /** XP awarded when the owner kills a mob within {@link #xpKillRadius}. */
-    private int     xpPerKill;
-    private double  xpKillRadius;
-    /** Passive XP awarded every {@link #passiveXpPeriodTicks} while summoned. */
-    private int     passiveXpAmount;
-    private long    passiveXpPeriodTicks;
+    // ---- Companion abilities (heal aura + combat assist) ----
+    // Leveling/XP was removed: the companion no longer levels up, gains XP, or
+    // scales with level. The heal aura and combat assist remain as flat,
+    // always-available abilities (each individually toggleable).
     /** Ability toggles. */
-    private boolean abilitySpeed;
     private boolean abilityHealAura;
     private boolean abilityCombatAssist;
-    /** Level at which the heal aura unlocks. */
-    private int     healAuraUnlockLevel;
     /** Ticks between heal-aura pulses. */
     private long    healAuraPeriodTicks;
     /** Hearts (×2 = HP) restored per aura pulse. */
@@ -662,13 +650,11 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
         /** Next tick the spotter chat-warning sweep is allowed to run. */
         long nextSpotterScanTick;
 
-        // ----- FEATURE 2: leveling & abilities -----
-        /** Persisted companion level (1..max-level). */
+        // ----- Persisted companion state -----
+        /** Legacy persisted level/xp. Leveling was removed; these are kept only
+         *  so old per-owner save files still load cleanly. No gameplay effect. */
         int level = 1;
-        /** Persisted XP toward the next level. */
         int xp = 0;
-        /** Tick of the last passive-XP award (throttle). */
-        long lastPassiveXpTick;
         /** Tick of the last heal/regen aura pulse. */
         long lastHealAuraTick;
 
@@ -1000,25 +986,16 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
         bedrockRealEntity     = cfg.getBoolean("bedrock-real-entity", false);
         bedrockCompanionType  = cfg.getString("bedrock-companion-type", "ALLAY");
 
-        // FEATURE 2: leveling & abilities
-        levelingEnabled       = cfg.getBoolean("leveling.enabled", true);
-        // 0 (or negative) = unlimited / indefinite leveling. Any positive
-        // value caps it. Default is now unlimited.
-        int cfgMaxLevel       = cfg.getInt("leveling.max-level", 0);
-        maxLevel              = cfgMaxLevel <= 0 ? Integer.MAX_VALUE : Math.max(1, cfgMaxLevel);
-        xpBase                = Math.max(1, cfg.getInt("leveling.xp-base", 30));
-        xpPerLevel            = Math.max(0, cfg.getInt("leveling.xp-per-level", 20));
-        xpPerKill             = Math.max(0, cfg.getInt("leveling.xp-per-kill", 5));
-        xpKillRadius          = Math.max(1.0, Math.min(64.0, cfg.getDouble("leveling.xp-kill-radius", 24.0)));
-        passiveXpAmount       = Math.max(0, cfg.getInt("leveling.passive-xp-amount", 1));
-        passiveXpPeriodTicks  = Math.max(20, cfg.getLong("leveling.passive-xp-period-seconds", 30) * 20L);
-        abilitySpeed          = cfg.getBoolean("leveling.abilities.movement-speed", true);
-        abilityHealAura       = cfg.getBoolean("leveling.abilities.heal-aura", true);
-        abilityCombatAssist   = cfg.getBoolean("leveling.abilities.combat-assist", true);
-        healAuraUnlockLevel   = Math.max(1, cfg.getInt("leveling.abilities.heal-aura-unlock-level", 3));
-        healAuraPeriodTicks   = Math.max(20, cfg.getLong("leveling.abilities.heal-aura-period-seconds", 4) * 20L);
-        healAuraAmount        = Math.max(0.5, cfg.getDouble("leveling.abilities.heal-aura-hearts", 1.0)) * 2.0;
-        healAuraRange         = Math.max(2.0, Math.min(48.0, cfg.getDouble("leveling.abilities.heal-aura-range", 8.0)));
+        // Companion abilities. Leveling/XP was removed entirely — the companion
+        // no longer levels up, gains XP, scales speed/health, or announces
+        // level-ups. The heal aura and combat assist remain as flat abilities.
+        // (Read from the new `abilities.*` keys; legacy `leveling.*` keys are
+        // ignored.)
+        abilityHealAura       = cfg.getBoolean("abilities.heal-aura", true);
+        abilityCombatAssist   = cfg.getBoolean("abilities.combat-assist", true);
+        healAuraPeriodTicks   = Math.max(20, cfg.getLong("abilities.heal-aura-period-seconds", 4) * 20L);
+        healAuraAmount        = Math.max(0.5, cfg.getDouble("abilities.heal-aura-hearts", 1.0)) * 2.0;
+        healAuraRange         = Math.max(2.0, Math.min(48.0, cfg.getDouble("abilities.heal-aura-range", 8.0)));
 
         // FEATURE 4: mount mode
         allowMount            = cfg.getBoolean("allow-mount", true);
@@ -1348,7 +1325,7 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
         p.sendMessage("§7/kc skin <fileName> §8— skin from skins/<fileName>.json");
         p.sendMessage("§7/kc skins §8— open the appearances menu");
         p.sendMessage("§7/kc form <mob|human> §8— morph into any mob (she fights hostiles!)");
-        p.sendMessage("§7/kc info §8— level, xp + abilities");
+        p.sendMessage("§7/kc info §8— abilities + form");
         p.sendMessage("§7/kc standby §8— hold position here & fight what's near");
         p.sendMessage("§7/kc kill <hostile|all|players|type|name> §8— hunt targets near you");
         p.sendMessage("§7/kc clearinv §8— empty her bags");
@@ -1750,26 +1727,16 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
         spawnEntity(p, c);
     }
 
-    /** Print companion level / xp / abilities status (FEATURE 2). */
+    /** Print companion abilities + form status. (Leveling/XP was removed.) */
     private void doInfo(Player p) {
         Companion c = companions.computeIfAbsent(p.getUniqueId(), u -> loadOrCreate(p));
         p.sendMessage("§d✿ " + c.name + " ✿");
-        if (levelingEnabled) {
-            if (c.level >= maxLevel) {
-                p.sendMessage("§7Level: §f" + c.level + " §8(max)");
-            } else {
-                p.sendMessage("§7Level: §f" + c.level + "  §7XP: §f" + c.xp + "§7/§f" + xpForLevel(c.level));
-            }
-            StringBuilder ab = new StringBuilder("§7Abilities: ");
-            List<String> on = new ArrayList<>();
-            if (abilitySpeed) on.add("speed");
-            if (abilityHealAura) on.add("heal-aura" + (c.level >= healAuraUnlockLevel ? "§a(active)§7" : "§8(Lv" + healAuraUnlockLevel + ")§7"));
-            if (abilityCombatAssist) on.add("assist");
-            ab.append(on.isEmpty() ? "§8none" : "§f" + String.join("§7, §f", on));
-            p.sendMessage(ab.toString());
-        } else {
-            p.sendMessage("§7Leveling is disabled on this server.");
-        }
+        StringBuilder ab = new StringBuilder("§7Abilities: ");
+        List<String> on = new ArrayList<>();
+        if (abilityHealAura) on.add("heal-aura");
+        if (abilityCombatAssist) on.add("assist");
+        ab.append(on.isEmpty() ? "§8none" : "§f" + String.join("§7, §f", on));
+        p.sendMessage(ab.toString());
         p.sendMessage("§7Form: §f" + (c.realEntity
                 ? resolveBedrockType(c).name().toLowerCase(Locale.ROOT) + " (real entity)"
                 : "fake-player"));
@@ -2417,10 +2384,9 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
             applyDivePitch(c);
             applySwimBob(c);
 
-            // FEATURE 2: passive XP + ability pulses (heal aura). Cheap when
-            // disabled (a couple of boolean checks). Combat-kill XP comes in
-            // through onEntityDeath; this handles the passive + aura side.
-            tickLeveling(c, owner, tick);
+            // Ability pulses (heal aura). Cheap when disabled (a single
+            // boolean check). Leveling/XP was removed entirely.
+            tickAbilities(c, owner, tick);
           } catch (Throwable t) {
             // Isolate a single companion's failure so it can't abort the
             // rest of this tick's companions. The timer itself survives
@@ -2805,8 +2771,7 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
                 || nav.getLocation().distance(owner.getLocation()) > FOLLOW_WARP_DISTANCE) {
             nav.teleport(dest); // strayed / wrong world — snap back
         } else {
-            double speed = 1.1;
-            if (abilitySpeed && levelingEnabled) speed = Math.min(1.8, 1.0 + (c.level - 1) * 0.08);
+            double speed = 1.1; // flat — leveling/speed-scaling was removed
             try { nav.getPathfinder().moveTo(dest, speed); } catch (Throwable ignored) {}
         }
         mirrorToNavigator(c);
@@ -4920,8 +4885,9 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
             String skin = cfg.getString("skin");
             if (name != null && !name.isBlank()) c.name = name;
             if (skin != null && !skin.isBlank()) c.skin = skin;
-            // FEATURE 2 (leveling) + FEATURE 1 (bedrock form) persisted state.
-            c.level = Math.max(1, Math.min(maxLevel, cfg.getInt("level", 1)));
+            // Legacy level/xp (leveling removed) + FEATURE 1 (bedrock form) state.
+            // Still read so old saves load cleanly; they have no gameplay effect.
+            c.level = Math.max(1, cfg.getInt("level", 1));
             c.xp    = Math.max(0, cfg.getInt("xp", 0));
             String bType = cfg.getString("bedrock-type");
             if (bType != null && !bType.isBlank()) c.bedrockType = bType;
@@ -7281,8 +7247,9 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
             try { le.setRemoveWhenFarAway(false); } catch (Throwable ignored) {}
             try { le.setCanPickupItems(false); } catch (Throwable ignored) {}
             // version-safe health: deprecated setMaxHealth + setHealth, no Attribute enum.
+            // Flat 20 HP — leveling/health-scaling was removed.
             try {
-                double hp = 20.0 + (c.level - 1) * 4.0;
+                double hp = 20.0;
                 le.setMaxHealth(hp);
                 le.setHealth(hp);
             } catch (Throwable ignored) {}
@@ -7443,12 +7410,8 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
                     // first (smooth), but flyers + slow mobs benefit from a
                     // gentle nudge teleport when they fall behind.
                     if (e instanceof Mob mob) {
-                        // FEATURE 2: movement speed up — pathfind faster at
-                        // higher levels (capped) when the speed ability is on.
+                        // Flat follow speed — leveling/speed-scaling was removed.
                         double speed = 1.0;
-                        if (abilitySpeed && levelingEnabled) {
-                            speed = Math.min(1.8, 1.0 + (c.level - 1) * 0.08);
-                        }
                         try { mob.getPathfinder().moveTo(owner, speed); } catch (Throwable ignored) {}
                     }
                     if (dist > followDistance + 6.0
@@ -7467,7 +7430,7 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
         // Keep the name fresh (level may have changed).
         try { e.setCustomName("\u00a7d" + companionDisplayName(c)); } catch (Throwable ignored) {}
 
-        tickLeveling(c, owner, tick);
+        tickAbilities(c, owner, tick);
     }
 
     // ============================================================
@@ -7624,12 +7587,8 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
                 try { wd.setAnger(target, 120); } catch (Throwable ignored) {}
             }
             if (style.melee && dist > 2.4 && c.mode != BehaviorMode.STAY) {
-                // Close in. Speed ability makes her lunge faster, like the
-                // real-entity follow path.
+                // Close in at a flat lunge speed — leveling/speed-scaling was removed.
                 double speed = 1.1;
-                if (abilitySpeed && levelingEnabled) {
-                    speed = Math.min(1.9, 1.1 + (c.level - 1) * 0.08);
-                }
                 try { mob.getPathfinder().moveTo(target, speed); } catch (Throwable ignored) {}
             } else {
                 try { mob.lookAt(target); } catch (Throwable ignored) {} // Paper-only nicety
@@ -7667,10 +7626,7 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
                 try { wd.setAnger(target, 120); } catch (Throwable ignored) {}
             }
             if (style.melee && dist > 2.4 && c.mode != BehaviorMode.STAY) {
-                double speed = 1.1;
-                if (abilitySpeed && levelingEnabled) {
-                    speed = Math.min(1.9, 1.1 + (c.level - 1) * 0.08);
-                }
+                double speed = 1.1; // flat — leveling/speed-scaling was removed
                 try { mob.getPathfinder().moveTo(target, speed); } catch (Throwable ignored) {}
             } else {
                 try { mob.lookAt(target); } catch (Throwable ignored) {}
@@ -8022,81 +7978,19 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
     // ============== FEATURE 2: LEVELING & ABILITIES ============
     // ============================================================
 
-    /** Display name shown on the entity / in messages: name + level badge. */
+    /** Display name shown on the entity / in messages. No level badge \u2014
+     *  leveling was removed. */
     private String companionDisplayName(Companion c) {
-        if (!levelingEnabled) return c.name;
-        return c.name + " \u00a77[Lv " + c.level + "]";
-    }
-
-    /** XP required to advance FROM level n to n+1. */
-    private int xpForLevel(int n) {
-        return xpBase + xpPerLevel * Math.max(0, n - 1);
+        return c.name;
     }
 
     /**
-     * Award XP and process any level-ups. Runs on the main thread. Safe to
-     * call for both render paths. No-op when leveling is disabled or already
-     * at max level.
+     * Periodic ability pulses. Called every movement tick for both render
+     * paths; the heal aura is throttled. Leveling/XP was removed, so there is
+     * no passive-XP or level-up logic here anymore \u2014 only the heal aura.
      */
-    private void awardXp(Companion c, Player owner, int amount) {
-        if (!levelingEnabled || amount <= 0) return;
-        if (c.level >= maxLevel) return;
-        c.xp += amount;
-        boolean leveled = false;
-        while (c.level < maxLevel && c.xp >= xpForLevel(c.level)) {
-            c.xp -= xpForLevel(c.level);
-            c.level++;
-            leveled = true;
-            onLevelUp(c, owner);
-        }
-        if (c.level >= maxLevel) c.xp = 0;
-        if (leveled) saveMemory(c);
-    }
-
-    /** Announce a level-up (title + sound) and refresh abilities/name. */
-    private void onLevelUp(Companion c, Player owner) {
-        // Title + subtitle. Stable Bukkit API.
-        try {
-            owner.sendTitle("\u00a7d\u2726 " + c.name + " \u00a7dreached Lv " + c.level + " \u2726",
-                    "\u00a77she hits harder now ~ (+\u00bd\u2764 attack)", 10, 50, 20);
-        } catch (Throwable ignored) {}
-        // Sound by namespaced string \u2014 NO Sound enum (version-safe).
-        try {
-            owner.playSound(owner.getLocation(), "entity.player.levelup", 1.0f, 1.4f);
-        } catch (Throwable ignored) {}
-        owner.sendMessage("\u00a7d(\u2727) \u00a7f" + c.name + "\u00a7d leveled up to \u00a7fLv " + c.level + "\u00a7d \u2728");
-        if (abilityHealAura && c.level == healAuraUnlockLevel) {
-            owner.sendMessage("\u00a7d(\u2727) \u00a7f" + c.name + "\u00a7d unlocked the \u00a7dheal aura\u00a7d! \u2661");
-        }
-        // Refresh the name tag so the new level shows. Real-entity → update
-        // traits in place; fake-player → respawn (the only way to rebroadcast
-        // the NMS name tag, mirroring how /kc rename does it).
-        if (c.realEntity) {
-            Entity e = liveRealEntity(c);
-            if (e != null) applyRealEntityTraits(e, c);
-        } else if (showNameTag && c.entity != null && !c.entity.isDead() && owner != null) {
-            despawnEntity(c);
-            spawnEntity(owner, c);
-        }
-    }
-
-    /**
-     * Passive XP + heal-aura pulses. Called every movement tick for both
-     * render paths; everything inside is throttled.
-     */
-    private void tickLeveling(Companion c, Player owner, long tick) {
-        if (!levelingEnabled) return;
-
-        // Slow passive XP while summoned.
-        if (passiveXpAmount > 0 && c.level < maxLevel
-                && tick - c.lastPassiveXpTick >= passiveXpPeriodTicks) {
-            c.lastPassiveXpTick = tick;
-            awardXp(c, owner, passiveXpAmount);
-        }
-
-        // Heal / regen aura to the owner at higher levels.
-        if (abilityHealAura && c.level >= healAuraUnlockLevel
-                && tick - c.lastHealAuraTick >= healAuraPeriodTicks) {
+    private void tickAbilities(Companion c, Player owner, long tick) {
+        if (abilityHealAura && tick - c.lastHealAuraTick >= healAuraPeriodTicks) {
             c.lastHealAuraTick = tick;
             applyHealAura(c, owner);
         }
@@ -8139,39 +8033,6 @@ public final class KawaiiCompanion extends JavaPlugin implements Listener, TabCo
         }
         if (c.entity == null || c.entity.isDead()) return null;
         return c.entity.getLocation();
-    }
-
-    /**
-     * Award combat XP when an owner kills a mob near their companion.
-     * Also nudges the companion's effective movement speed for the
-     * real-entity path (FEATURE 2: movement speed up at higher levels).
-     */
-    @EventHandler
-    public void onEntityDeath(EntityDeathEvent event) {
-        if (!levelingEnabled || xpPerKill <= 0) return;
-        LivingEntity dead = event.getEntity();
-        Player killer = dead.getKiller();
-        if (killer == null) {
-            // FEATURE 5: mob-on-mob kills have no Player killer — when the
-            // mob-form companion landed the killing blow herself, credit
-            // the same combat XP.
-            if (dead.getLastDamageCause() instanceof EntityDamageByEntityEvent ev) {
-                Companion fc = companionByAttacker(ev.getDamager());
-                if (fc != null) {
-                    Player owner = Bukkit.getPlayer(fc.owner);
-                    if (owner != null && owner.isOnline()) awardXp(fc, owner, xpPerKill);
-                }
-            }
-            return;
-        }
-        Companion c = companions.get(killer.getUniqueId());
-        if (c == null || !isCompanionLive(c)) return;
-        // Only count kills near the companion so it feels like teamwork.
-        Location cl = companionLoc(c);
-        if (cl == null) return;
-        if (killer.getWorld() != cl.getWorld()) return;
-        if (killer.getLocation().distance(cl) > xpKillRadius) return;
-        awardXp(c, killer, xpPerKill);
     }
 
     /**
