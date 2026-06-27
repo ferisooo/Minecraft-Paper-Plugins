@@ -78,7 +78,9 @@ public final class KawaiiThirst extends JavaPlugin implements Listener {
         key = new NamespacedKey(this, "thirst");
         readConfig();
         getServer().getPluginManager().registerEvents(this, this);
-        Bukkit.getScheduler().runTaskTimer(this, this::tickAll, intervalTicks, intervalTicks);
+        // Folia-safe: global-region repeating driver, per-player work hops to
+        // each player's entity scheduler (damage/effects/thirst touch the player).
+        Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, task -> tickAll(), intervalTicks, intervalTicks);
         for (Player p : Bukkit.getOnlinePlayers()) ensureBar(p);
         getLogger().info("(✧) KawaiiThirst ready ~ stay hydrated! 💧");
     }
@@ -135,7 +137,9 @@ public final class KawaiiThirst extends JavaPlugin implements Listener {
 
     private void tickAll() {
         if (!enabled) return;
-        for (Player p : Bukkit.getOnlinePlayers()) update(p);
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            p.getScheduler().run(this, t -> update(p), null);
+        }
     }
 
     private void update(Player p) {

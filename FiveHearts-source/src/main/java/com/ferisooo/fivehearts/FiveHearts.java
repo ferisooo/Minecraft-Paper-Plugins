@@ -9,7 +9,6 @@ import org.bukkit.event.player.PlayerItemConsumeEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.scheduler.BukkitRunnable;
 
 public final class FiveHearts extends JavaPlugin implements Listener {
 
@@ -30,14 +29,19 @@ public final class FiveHearts extends JavaPlugin implements Listener {
         // onConsume / onJoin / onRespawn); this periodic pass is just a safety
         // net, so once-per-second is plenty — no need for a second full sweep.
         // Regen is gated on food being at the cap, so its cadence is unchanged.
-        new BukkitRunnable() {
-            @Override public void run() {
-                for (Player p : getServer().getOnlinePlayers()) {
+        //
+        // Folia-safe: a global-region repeating task reads the online-player
+        // collection, then hops each player's own work onto THAT player's entity
+        // scheduler — health/food must only be touched on the player's region
+        // thread. Works identically on Paper/Purpur (single-threaded) and Folia.
+        getServer().getGlobalRegionScheduler().runAtFixedRate(this, task -> {
+            for (Player p : getServer().getOnlinePlayers()) {
+                p.getScheduler().run(this, t -> {
                     applyLimits(p);
                     regenerate(p);
-                }
+                }, null);
             }
-        }.runTaskTimer(this, 20L, 20L); // 20 ticks = 1 second
+        }, 20L, 20L); // 20 ticks = 1 second
 
         getLogger().info("FiveHearts enabled - 5 hearts, 5 drumsticks max, with custom regeneration.");
     }
@@ -49,7 +53,9 @@ public final class FiveHearts extends JavaPlugin implements Listener {
 
     @EventHandler
     public void onRespawn(PlayerRespawnEvent e) {
-        getServer().getScheduler().runTask(this, () -> applyLimits(e.getPlayer()));
+        Player p = e.getPlayer();
+        // Re-apply on the player's own region thread next tick (Folia-safe).
+        p.getScheduler().run(this, t -> applyLimits(p), null);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -62,7 +68,7 @@ public final class FiveHearts extends JavaPlugin implements Listener {
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onConsume(PlayerItemConsumeEvent e) {
         Player p = e.getPlayer();
-        getServer().getScheduler().runTask(this, () -> applyLimits(p));
+        p.getScheduler().run(this, t -> applyLimits(p), null);
     }
 
     /**
