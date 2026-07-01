@@ -63,6 +63,10 @@ public final class KawaiiRTP extends JavaPlugin {
     private final Set<String> blockedBiomes = new HashSet<>();
 
     private final Map<UUID, Long> lastUsedMillis = new ConcurrentHashMap<>();
+    /** Players with a search currently in flight (anti command-spam: the
+     *  cooldown only starts on a successful teleport, so without this a
+     *  player could stack many parallel chunk-load chains). */
+    private final Set<UUID> searching = ConcurrentHashMap.newKeySet();
 
     @Override
     public void onEnable() {
@@ -167,6 +171,11 @@ public final class KawaiiRTP extends JavaPlugin {
             }
         }
 
+        if (!searching.add(p.getUniqueId())) {
+            p.sendMessage("§d(✧) already rolling a spot for you~ hang on ✨");
+            return true;
+        }
+
         p.sendMessage("§d(✧) rolling a safe spot~ ✨");
         Location origin = p.getLocation();
         // Brief delay so the chat message renders before the freeze of chunk loads.
@@ -184,8 +193,12 @@ public final class KawaiiRTP extends JavaPlugin {
      * issue and chains naturally off the chunk-load future.
      */
     private void beginSearch(Player p, World world, Location origin, int attempt) {
-        if (!p.isOnline()) return;
+        if (!p.isOnline()) {
+            searching.remove(p.getUniqueId());
+            return;
+        }
         if (attempt >= maxAttempts) {
+            searching.remove(p.getUniqueId());
             p.sendMessage("§c(✧) couldn't find a safe spot after "
                     + maxAttempts + " tries — try again in a sec~");
             return;
@@ -234,7 +247,10 @@ public final class KawaiiRTP extends JavaPlugin {
     }
 
     private void evaluateCandidate(Player p, World world, Location origin, int x, int z, int attempt) {
-        if (!p.isOnline()) return;
+        if (!p.isOnline()) {
+            searching.remove(p.getUniqueId());
+            return;
+        }
 
         // MOTION_BLOCKING_NO_LEAVES skips leaves but treats water as solid,
         // which is exactly what we want for the first cut: anything reported
@@ -294,7 +310,10 @@ public final class KawaiiRTP extends JavaPlugin {
             p.playSound(p.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 0.8f, 1.0f);
         }
 
-        p.teleportAsync(dest).thenAccept(success -> {
+        p.teleportAsync(dest).whenComplete((success, err) -> {
+            // Clear the in-flight flag however the teleport ends (success,
+            // refusal, or exceptional completion) so /krtp never gets stuck.
+            searching.remove(p.getUniqueId());
             if (Boolean.TRUE.equals(success)) {
                 lastUsedMillis.put(p.getUniqueId(), System.currentTimeMillis());
                 Bukkit.getScheduler().runTask(this, () -> {

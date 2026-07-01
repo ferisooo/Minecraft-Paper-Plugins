@@ -13,6 +13,7 @@ import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.SignChangeEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
@@ -180,11 +181,19 @@ public final class KawaiiSigns extends JavaPlugin implements Listener {
         if (event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
         Block block = event.getClickedBlock();
         if (block == null) return;
+        if (!isSign(block.getType())) return; // cheap check before the getState() snapshot
         if (!(block.getState() instanceof Sign sign)) return;
 
         PersistentDataContainer pdc = sign.getPersistentDataContainer();
         String cmd = pdc.get(cmdKey, PersistentDataType.STRING);
         if (cmd == null || cmd.isEmpty()) return;
+
+        // PlayerInteractEvent fires once per hand; only act on the main hand so the
+        // command doesn't run twice per click. Still cancel the off-hand interaction.
+        if (event.getHand() != EquipmentSlot.HAND) {
+            event.setCancelled(true);
+            return;
+        }
 
         Player p = event.getPlayer();
 

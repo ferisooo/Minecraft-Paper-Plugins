@@ -63,8 +63,12 @@ public final class KawaiiRecipes extends JavaPlugin implements Listener {
         saveDefaultConfig();
         loadConfigValues();
         getServer().getPluginManager().registerEvents(this, this);
-        // Catch anyone already online (e.g. after a /reload).
-        for (Player p : Bukkit.getOnlinePlayers()) unlockAll(p);
+        // Catch anyone already online (e.g. after a /reload). Deferred one tick
+        // so every other plugin has finished registering its recipes before the
+        // key cache is built (unlockAll builds it on first use).
+        Bukkit.getScheduler().runTask(this, () -> {
+            for (Player p : Bukkit.getOnlinePlayers()) unlockAll(p);
+        });
         getLogger().info("KawaiiRecipes enabled ~ recipe book fully stocked (\u2727)");
     }
 

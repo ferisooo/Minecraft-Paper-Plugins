@@ -339,6 +339,14 @@ public final class KawaiiWorlds extends JavaPlugin implements TabExecutor, Liste
             sender.sendMessage("§c(✧) load returned null (check console)");
             return true;
         }
+        if (cfg == null) {
+            // Register the world so it survives restarts (matches the GUI import path).
+            String base = "worlds." + name + ".";
+            getConfig().set(base + "type", type);
+            getConfig().set(base + "seed", w.getSeed());
+            getConfig().set(base + "auto-load", true);
+            saveConfig();
+        }
         sender.sendMessage("§a(✧) loaded '" + name + "'");
         return true;
     }
@@ -406,20 +414,26 @@ public final class KawaiiWorlds extends JavaPlugin implements TabExecutor, Liste
         // even if the folder can't be removed right now (locked region files).
         getConfig().set("worlds." + name, null);
         saveConfig();
+        spawnProtectionRadius.remove(name);
 
         File folder = new File(Bukkit.getWorldContainer(), name);
         if (!folder.exists()) {
             sender.sendMessage("§e(✧) no folder on disk; cleared config entry for '" + name + "'");
             return true;
         }
-        try {
-            deleteRecursively(folder.toPath());
-        } catch (Throwable t) {
-            sender.sendMessage("§e(✧) removed '" + name + "' from config, but the folder "
-                    + "couldn't be fully deleted (" + t.getMessage() + "). Delete it manually if it lingers.");
-            return true;
-        }
-        sender.sendMessage("§a(✧) deleted '" + name + "'");
+        // Deleting a world folder can mean removing thousands of region files —
+        // do it off the main thread so it doesn't stall the tick loop.
+        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+            try {
+                deleteRecursively(folder.toPath());
+                Bukkit.getScheduler().runTask(this, () ->
+                        sender.sendMessage("§a(✧) deleted '" + name + "'"));
+            } catch (Throwable t) {
+                Bukkit.getScheduler().runTask(this, () ->
+                        sender.sendMessage("§e(✧) removed '" + name + "' from config, but the folder "
+                                + "couldn't be fully deleted (" + t.getMessage() + "). Delete it manually if it lingers."));
+            }
+        });
         return true;
     }
 
@@ -1231,17 +1245,21 @@ public final class KawaiiWorlds extends JavaPlugin implements TabExecutor, Liste
         // reappears). Config removal is the source of truth.
         getConfig().set("worlds." + worldName, null);
         saveConfig();
+        spawnProtectionRadius.remove(worldName);
 
         File folder = new File(Bukkit.getWorldContainer(), worldName);
         if (folder.exists()) {
-            try {
-                deleteRecursively(folder.toPath());
-            } catch (Throwable t) {
-                p.sendMessage("§e(✧) removed '" + worldName + "' from config, but the folder "
-                        + "couldn't be fully deleted (" + t.getMessage() + "). "
-                        + "Delete it manually if it lingers.");
-                return true;
-            }
+            // Off the main thread — a big world folder can take seconds to delete.
+            Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+                try {
+                    deleteRecursively(folder.toPath());
+                } catch (Throwable t) {
+                    Bukkit.getScheduler().runTask(this, () ->
+                            p.sendMessage("§e(✧) removed '" + worldName + "' from config, but the folder "
+                                    + "couldn't be fully deleted (" + t.getMessage() + "). "
+                                    + "Delete it manually if it lingers."));
+                }
+            });
         }
         return true;
     }
@@ -1482,6 +1500,9 @@ public final class KawaiiWorlds extends JavaPlugin implements TabExecutor, Liste
         if (perWorldInventory) {
             saveSnapshot(e.getPlayer(), groupOf(e.getPlayer().getWorld()));
         }
+        // Clean up per-player state so the maps don't grow forever.
+        deathWorld.remove(e.getPlayer().getUniqueId());
+        pendingCreate.remove(e.getPlayer().getUniqueId());
     }
 
     @EventHandler

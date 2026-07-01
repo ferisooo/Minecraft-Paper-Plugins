@@ -194,7 +194,17 @@ public final class DeepSeekClient {
 
     /** @return the canonical target (or "ANY") if valid + not blocked for this type, else null. */
     private String validateTarget(Quest.Type type, String target) {
-        if (target.equalsIgnoreCase("ANY")) return "ANY"; // count-any objectives (fish/enchant/trade)
+        if (target.equalsIgnoreCase("ANY")) {
+            // "ANY" only makes sense for count-any objectives; for MINE/KILL/
+            // COLLECT/SMELT/CRAFT it would make any block/mob/item count and
+            // turn the quest into free loot, so reject those.
+            switch (type) {
+                case FISH: case ENCHANT: case TRADE: case BREED: case TAME:
+                    return "ANY";
+                default:
+                    return null;
+            }
+        }
         String canonical;
         switch (type) {
             case TRADE:

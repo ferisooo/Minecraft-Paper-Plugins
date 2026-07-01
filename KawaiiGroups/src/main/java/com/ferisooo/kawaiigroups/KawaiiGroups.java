@@ -81,6 +81,9 @@ public final class KawaiiGroups extends JavaPlugin implements Listener {
     // snapshots settings on the main thread and writes the bytes off-thread.
     private volatile boolean settingsDirty = false;
     private org.bukkit.scheduler.BukkitTask flushTask;
+    // Guards the actual file write: the sync save (onDisable) must not overlap
+    // an in-flight async write from the debounced flusher.
+    private final Object saveLock = new Object();
 
     // ---- config ----
     private int baseHearts;
@@ -175,7 +178,7 @@ public final class KawaiiGroups extends JavaPlugin implements Listener {
     /** Synchronous flush (used on disable). Writes the current settings to disk. */
     private void saveSettings() {
         settingsDirty = false;
-        try { settings.save(settingsFile); }
+        try { synchronized (saveLock) { settings.save(settingsFile); } }
         catch (IOException e) { getLogger().warning("Could not save players.yml: " + e.getMessage()); }
     }
 
@@ -191,7 +194,9 @@ public final class KawaiiGroups extends JavaPlugin implements Listener {
         final File file = settingsFile;
         Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
             try {
-                Files.write(file.toPath(), data.getBytes(StandardCharsets.UTF_8));
+                synchronized (saveLock) {
+                    Files.write(file.toPath(), data.getBytes(StandardCharsets.UTF_8));
+                }
             } catch (IOException e) {
                 settingsDirty = true; // retry on the next tick of the flush timer
                 getLogger().warning("Could not save players.yml: " + e.getMessage());
@@ -877,6 +882,8 @@ public final class KawaiiGroups extends JavaPlugin implements Listener {
         invites.remove(id);
         tpReqs.remove(id);
         chatChannel.remove(id);
+        // Drop any pending join requests they left in other groups.
+        for (Group jr : groups.values()) jr.joinRequests.remove(id);
         Group g = groupOf(id);
         if (g != null) {
             if (g.owner.equals(id)) {

@@ -42,6 +42,18 @@ public final class FiveHearts extends JavaPlugin implements Listener {
         getLogger().info("FiveHearts enabled - 5 hearts, 5 drumsticks max, with custom regeneration.");
     }
 
+    @Override
+    public void onDisable() {
+        // Restore vanilla max health: the max-health attribute persists in
+        // player data, so without this an uninstall would leave everyone
+        // capped at 5 hearts forever. On a reload, onEnable/onJoin simply
+        // re-apply the cap right after.
+        for (Player p : getServer().getOnlinePlayers()) {
+            if (p.isDead() || p.getHealth() <= 0.0) continue; // never touch the dead
+            try { p.resetMaxHealth(); } catch (Throwable ignored) {}
+        }
+    }
+
     @EventHandler
     public void onJoin(PlayerJoinEvent e) {
         applyLimits(e.getPlayer());
@@ -103,7 +115,9 @@ public final class FiveHearts extends JavaPlugin implements Listener {
         // KawaiiWorlds worlds, where the player arrives at the default 20 max,
         // so the "!= FORCED_HEALTH" check fired setMaxHealth() mid-death.
         // Max-health is (re)applied on the next tick after respawn (onRespawn).
-        if (player.isDead() || player.getHealth() <= 0.0) return;
+        // Also skip players who logged out before a scheduled call (onRespawn /
+        // onConsume run this a tick later) reached them.
+        if (!player.isOnline() || player.isDead() || player.getHealth() <= 0.0) return;
 
         // The forced max is normally 5 hearts, but KawaiiGroups can raise it for
         // grouped players via the "group-max-health" metadata it sets — we honour

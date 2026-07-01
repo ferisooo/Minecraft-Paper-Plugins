@@ -248,6 +248,7 @@ public final class KawaiiQuests extends JavaPlugin implements TabCompleter {
             a.completed = true;
             completeQuest(p, q);
         } else {
+            saveData(); // flag dirty so the periodic flush persists progress
             updateQuestDisplay(p);
             p.sendActionBar(progressActionBar(a));
         }
@@ -483,8 +484,9 @@ public final class KawaiiQuests extends JavaPlugin implements TabCompleter {
         return y;
     }
 
-    /** Write the given serialized YAML to data.yml. May run off the main thread. */
-    private void writeData(String yaml) {
+    /** Write the given serialized YAML to data.yml. May run off the main thread;
+     *  synchronized so an async flush can't interleave with the shutdown flush. */
+    private synchronized void writeData(String yaml) {
         try {
             File folder = getDataFolder();
             if (!folder.exists()) folder.mkdirs();

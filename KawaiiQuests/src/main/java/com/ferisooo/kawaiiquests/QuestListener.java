@@ -158,14 +158,20 @@ public final class QuestListener implements Listener {
                     default -> null;
                 };
                 if (diff != null) {
-                    p.closeInventory();
-                    plugin.requestQuest(p, diff);
+                    // closeInventory()/openInventory() must not run inside an
+                    // InventoryClickEvent handler — defer to the next tick.
+                    plugin.getServer().getScheduler().runTask(plugin, () -> {
+                        p.closeInventory();
+                        plugin.requestQuest(p, diff);
+                    });
                 }
             }
             case ACTIVE -> {
                 if (e.getRawSlot() == QuestGui.SLOT_ABANDON) {
-                    plugin.abandonQuest(p);
-                    p.closeInventory();
+                    plugin.getServer().getScheduler().runTask(plugin, () -> {
+                        plugin.abandonQuest(p);
+                        p.closeInventory();
+                    });
                 }
             }
             case CRATE -> { /* nothing clickable while it spins */ }

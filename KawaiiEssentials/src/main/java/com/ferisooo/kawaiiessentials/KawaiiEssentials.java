@@ -94,6 +94,15 @@ public final class KawaiiEssentials extends JavaPlugin implements Listener {
     private volatile boolean dataDirty = false;
     private volatile boolean warpsDirty = false;
 
+    // Guards the actual disk writes. The async scheduler is a thread pool, so
+    // two writes to the same file could run out of order (stale YAML clobbering
+    // newer) or interleave with the synchronous onDisable save. Every write
+    // carries a main-thread-assigned sequence number; a stale write is skipped,
+    // and the lock keeps writers from overlapping in the same file.
+    private final Object ioLock = new Object();
+    private final Map<String, Long> lastWriteSeq = new HashMap<>(); // guarded by ioLock
+    private long writeSeqCounter = 0; // main thread only
+
     // Keys used to stash a warp owner / warp name on a GUI button so clicks
     // resolve unambiguously (instead of parsing display names).
     private NamespacedKey ownerKey;
@@ -183,28 +192,19 @@ public final class KawaiiEssentials extends JavaPlugin implements Listener {
         warps = YamlConfiguration.loadConfiguration(warpsFile);
     }
 
+    // Synchronous saves (shutdown path). They go through the same sequenced
+    // writeStore as the async flush, so a still-running async write can neither
+    // interleave with them nor clobber them afterwards with stale content.
     private void saveWarps() {
-        try {
-            warps.save(warpsFile);
-        } catch (IOException e) {
-            getLogger().warning("Could not save warps.yml: " + e.getMessage());
-        }
+        writeStore(warps.saveToString(), warpsFile, "warps.yml", ++writeSeqCounter);
     }
 
     private void saveHomes() {
-        try {
-            homes.save(homesFile);
-        } catch (IOException e) {
-            getLogger().warning("Could not save homes.yml: " + e.getMessage());
-        }
+        writeStore(homes.saveToString(), homesFile, "homes.yml", ++writeSeqCounter);
     }
 
     private void saveData() {
-        try {
-            data.save(dataFile);
-        } catch (IOException e) {
-            getLogger().warning("Could not save data.yml: " + e.getMessage());
-        }
+        writeStore(data.saveToString(), dataFile, "data.yml", ++writeSeqCounter);
     }
 
     // ---- dirty markers (called on the main thread in place of synchronous saves) ----
@@ -234,14 +234,23 @@ public final class KawaiiEssentials extends JavaPlugin implements Listener {
 
     /** Write the already-serialised YAML text to {@code file} off the main thread. */
     private void writeAsync(String yaml, File file, String label) {
-        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+        final long seq = ++writeSeqCounter; // assigned on the main thread, so ordered
+        Bukkit.getScheduler().runTaskAsynchronously(this, () -> writeStore(yaml, file, label, seq));
+    }
+
+    /** Write serialised YAML to {@code file} unless a newer write already landed. */
+    private void writeStore(String yaml, File file, String label, long seq) {
+        synchronized (ioLock) {
+            Long last = lastWriteSeq.get(label);
+            if (last != null && last > seq) return; // newer content is already on disk
+            lastWriteSeq.put(label, seq);
             try {
                 java.nio.file.Files.write(file.toPath(),
                         yaml.getBytes(java.nio.charset.StandardCharsets.UTF_8));
             } catch (IOException e) {
                 getLogger().warning("Could not save " + label + ": " + e.getMessage());
             }
-        });
+        }
     }
 
     /** Write a Location into a YAML section path. */
@@ -1579,10 +1588,15 @@ public final class KawaiiEssentials extends JavaPlugin implements Listener {
         }
     }
 
-    /** Drop a player from the animated-menu set when they disconnect. */
+    /** Drop a player's transient in-memory state when they disconnect. */
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
-        openMenuPlayers.remove(event.getPlayer().getUniqueId());
+        UUID id = event.getPlayer().getUniqueId();
+        openMenuPlayers.remove(id);
+        tpaRequests.remove(id);                                     // requests sent TO them
+        tpaRequests.values().removeIf(r -> r.requester.equals(id)); // requests sent BY them
+        pendingWarpRename.remove(id);
+        trashSnapshots.remove(id);
     }
 
     @EventHandler

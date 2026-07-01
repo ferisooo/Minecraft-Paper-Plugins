@@ -1,6 +1,5 @@
 package com.ferisooo.kawaiigroups;
 
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
@@ -20,8 +19,12 @@ public final class Group {
     String description = "";
     boolean privateMode = false;
 
-    /** Members in join order, mapped to their role. The owner is always present. */
-    final LinkedHashMap<UUID, Role> members = new LinkedHashMap<>();
+    /**
+     * Members mapped to their role. The owner is always present. Concurrent
+     * because the async chat event reads/iterates this while the main thread
+     * adds and removes members.
+     */
+    final Map<UUID, Role> members = new java.util.concurrent.ConcurrentHashMap<>();
     /** Players who have asked to join (handled by moderators+). */
     final Set<UUID> joinRequests = new LinkedHashSet<>();
 

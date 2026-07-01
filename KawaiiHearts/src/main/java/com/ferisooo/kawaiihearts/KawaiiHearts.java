@@ -6,6 +6,7 @@ import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -21,6 +22,7 @@ import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityRegainHealthEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.world.EntitiesLoadEvent;
 import org.bukkit.entity.Projectile;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
@@ -264,6 +266,24 @@ public final class KawaiiHearts extends JavaPlugin implements Listener {
         return sb.toString();
     }
 
+    /**
+     * The heart-bar lives in the mob's custom name, so it gets saved into
+     * chunk data (crash, unload, restart). After a restart {@code activeBars}
+     * is empty, so a stale persisted bar on a mob far from players would never
+     * be cleaned up. Restore any managed-but-untracked mob as its chunk loads;
+     * the proximity scan re-applies a fresh bar if a player is nearby.
+     */
+    @EventHandler
+    public void onEntitiesLoad(EntitiesLoadEvent e) {
+        for (Entity en : e.getEntities()) {
+            if (en instanceof LivingEntity le
+                    && !activeBars.contains(le.getUniqueId())
+                    && le.getPersistentDataContainer().has(managedKey, PersistentDataType.BYTE)) {
+                restore(le);
+            }
+        }
+    }
+
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onRegain(EntityRegainHealthEvent e) {
         if (!enabled) return;
@@ -322,9 +342,24 @@ public final class KawaiiHearts extends JavaPlugin implements Listener {
 
     private void scheduleTrack(Entity e) {
         if (!(e instanceof LivingEntity le)) return;
+        // Respect view-radius on the event path too: mob farms far from any
+        // player fire constant damage events, and renaming those mobs is
+        // wasted churn. The proximity scan picks a mob up if a player later
+        // comes within range.
+        if (!nearAnyPlayer(le)) return;
         Bukkit.getScheduler().runTask(this, () -> {
             if (le.isValid() && !le.isDead()) track(le);
         });
+    }
+
+    /** True if any player in the mob's world is within view-radius of it. */
+    private boolean nearAnyPlayer(LivingEntity le) {
+        double r2 = viewRadius * viewRadius;
+        Location at = le.getLocation();
+        for (Player p : le.getWorld().getPlayers()) {
+            if (p.getLocation().distanceSquared(at) <= r2) return true;
+        }
+        return false;
     }
 
     /** Apply/refresh a mob's bar and keep the active-set membership in sync. */

@@ -156,6 +156,10 @@ public final class KawaiiBlockHP extends JavaPlugin implements Listener {
     public void onBreak(BlockBreakEvent e) {
         Session s = sessions.get(e.getPlayer().getUniqueId());
         if (s == null) return;
+        // Only finish the session if THIS block is the one it tracks — an
+        // instant-break block popped mid-linger would otherwise blank a bar
+        // that belongs to a different block.
+        if (s.block == null || !s.block.equals(e.getBlock().getLocation())) return;
         // Show a final, empty bar for one frame then clear.
         s.progress = 1.0;
         s.broke = true;
