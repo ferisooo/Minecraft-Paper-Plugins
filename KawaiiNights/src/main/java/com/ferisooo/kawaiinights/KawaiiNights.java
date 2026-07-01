@@ -25,6 +25,7 @@ import org.bukkit.event.entity.EntityCombustEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.player.PlayerBedEnterEvent;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitTask;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
@@ -87,6 +88,7 @@ public final class KawaiiNights extends JavaPlugin implements Listener {
     private final List<EntityType> raidMobs = new ArrayList<>();
     private final Map<String, NightState> nights = new HashMap<>();
     private NamespacedKey raidTagKey;
+    private BukkitTask tickTask;
 
     /** UUIDs of currently-living raid-spawned mobs, so we needn't scan all world entities. */
     private final Set<UUID> raidMobIds = new HashSet<>();
@@ -105,8 +107,14 @@ public final class KawaiiNights extends JavaPlugin implements Listener {
         readConfig();
         raidTagKey = new NamespacedKey(this, "raid");
         getServer().getPluginManager().registerEvents(this, this);
-        Bukkit.getScheduler().runTaskTimer(this, this::tick, checkTicks, checkTicks);
+        scheduleTick();
         getLogger().info("(✧) KawaiiNights ready ~ the dark is always hungry 🌙");
+    }
+
+    /** (Re)schedule the main timer — used on enable and after a config reload. */
+    private void scheduleTick() {
+        if (tickTask != null) tickTask.cancel();
+        tickTask = Bukkit.getScheduler().runTaskTimer(this, this::tick, checkTicks, checkTicks);
     }
 
     private void readConfig() {
@@ -473,6 +481,7 @@ public final class KawaiiNights extends JavaPlugin implements Listener {
         if (sub.equals("reload")) {
             if (!sender.hasPermission("kawaiinights.admin")) { sender.sendMessage("§c(✧) no permission~"); return true; }
             readConfig();
+            scheduleTick(); // apply a changed check-ticks immediately
             sender.sendMessage("§d(✧) KawaiiNights reloaded ✨ (§f" + mobs.size() + "§d spawn / §f"
                     + raidMobs.size() + "§d raid mob types)");
             return true;

@@ -156,7 +156,9 @@ public final class KawaiiScoreboard extends JavaPlugin implements Listener {
     }
 
     private void tickAll() {
-        if (animatedTitle) titleFrame++;
+        // Advance even when the title animation is off — the frame counter also
+        // throttles clearMainBelowNameHealth below (stuck at 0 = runs every cycle).
+        titleFrame++;
         // Periodically strip any leftover health objective from the main
         // scoreboard's below-name slot — that's what shows mob health through
         // walls when a player is on the main board. Throttled to ~5s.

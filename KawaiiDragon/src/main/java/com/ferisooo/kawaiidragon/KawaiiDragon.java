@@ -61,8 +61,10 @@ public final class KawaiiDragon extends JavaPlugin implements Listener {
         loadData();
         getServer().getPluginManager().registerEvents(this, this);
         // Buff any dragon that's already loaded (e.g. /reload while in the End).
-        for (World w : Bukkit.getWorlds()) {
-            for (EnderDragon d : w.getEntitiesByClass(EnderDragon.class)) scaleDragon(d);
+        if (enabled) {
+            for (World w : Bukkit.getWorlds()) {
+                for (EnderDragon d : w.getEntitiesByClass(EnderDragon.class)) scaleDragon(d);
+            }
         }
         getLogger().info("(✧) KawaiiDragon ready ~ the dragon remembers (" + defeats + " defeats) 🐉");
     }

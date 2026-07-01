@@ -18,6 +18,7 @@ import org.bukkit.event.block.Action;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
@@ -144,7 +145,9 @@ public final class KawaiiEnderChest extends JavaPlugin implements Listener {
         }
 
         e.setCancelled(true); // stop the vanilla 27-slot ender chest from opening
-        open(p);
+        // PlayerInteractEvent fires once per hand — only open for the main hand
+        // so we don't open (and play the sound) twice per click.
+        if (e.getHand() == EquipmentSlot.HAND) open(p);
     }
 
     @EventHandler
@@ -165,8 +168,20 @@ public final class KawaiiEnderChest extends JavaPlugin implements Listener {
     @EventHandler
     public void onQuit(PlayerQuitEvent e) {
         UUID id = e.getPlayer().getUniqueId();
-        ItemStack[] snap = cache.remove(id);
-        if (snap != null) saveAsync(id, snap);
+        ItemStack[] snap = cache.get(id);
+        if (snap == null) return;
+        if (!isEnabled()) {
+            writeToDisk(id, snap);
+            cache.remove(id, snap);
+            return;
+        }
+        // Evict only AFTER the write lands, and only if no newer snapshot was
+        // cached meanwhile (instant rejoin) — otherwise a rejoin between quit
+        // and write-completion would load stale data from disk.
+        getServer().getScheduler().runTaskAsynchronously(this, () -> {
+            writeToDisk(id, snap);
+            cache.remove(id, snap);
+        });
     }
 
     // ============== open / load / save ==============
@@ -238,8 +253,10 @@ public final class KawaiiEnderChest extends JavaPlugin implements Listener {
         getServer().getScheduler().runTaskAsynchronously(this, () -> writeToDisk(id, snapshot));
     }
 
-    /** Serializes and writes a detached snapshot to disk. Thread-safe. */
-    private void writeToDisk(UUID id, ItemStack[] snapshot) {
+    /** Serializes and writes a detached snapshot to disk. Thread-safe.
+     *  Synchronized so overlapping async saves (close + quit, or quit +
+     *  onDisable flush) never interleave writes to the same file. */
+    private synchronized void writeToDisk(UUID id, ItemStack[] snapshot) {
         FileConfiguration cfg = new YamlConfiguration();
         List<ItemStack> contents = new ArrayList<>(snapshot.length);
         for (ItemStack it : snapshot) contents.add(it); // nulls preserved as empty slots
